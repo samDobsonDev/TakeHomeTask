@@ -1,7 +1,7 @@
 import pytest
 import tempfile
 from pathlib import Path
-from content_loader import ContentLoader, ContentLoadError
+from src.content_loader import ContentLoader, ContentLoadError
 
 
 @pytest.fixture

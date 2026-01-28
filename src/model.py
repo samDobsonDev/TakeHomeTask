@@ -70,28 +70,6 @@ class ContentModerationModel(ABC, Generic[PredictionType]):
     and returns raw metric scores.
     """
 
-    def __init_subclass__(cls, **kwargs):
-        """Validate that the model uses the correct prediction type"""
-        super().__init_subclass__(**kwargs)
-        # Get the generic type parameter
-        if hasattr(cls, '__orig_bases__'):
-            for base in cls.__orig_bases__:
-                if hasattr(base, '__args__'):
-                    expected_type = base.__args__[0]
-                    # Get the actual return types from the methods
-                    from typing import get_type_hints
-                    try:
-                        hints = get_type_hints(cls.predict_text)
-                        actual_type = hints.get('return')
-                        if actual_type and actual_type != expected_type:
-                            raise TypeError(
-                                f"{cls.__name__} declares {expected_type.__name__} "
-                                f"but predict_text returns {actual_type.__name__}"
-                            )
-                    except Exception as e:
-                        if isinstance(e, TypeError):
-                            raise
-
     @abstractmethod
     async def predict_text(self, input_data: PreprocessedText) -> PredictionType:
         pass

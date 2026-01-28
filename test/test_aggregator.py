@@ -1,5 +1,5 @@
 import pytest
-from aggregator import ScoreAggregator
+from src.aggregator import ScoreAggregator
 
 
 class TestScoreAggregator:

@@ -1,9 +1,9 @@
 import pytest
 import json
 import base64
-from unittest.mock import MagicMock, patch
-from service import Modality, ModerationRequest
-from request_handler import (
+from unittest.mock import MagicMock
+from src.service import Modality, ModerationRequest
+from src.request_handler import (
     ServiceContainer,
     RequestHandler,
     _parse_request,
@@ -167,7 +167,7 @@ class TestFormatSuccessResponse:
 
     def test_format_success_response_structure(self):
         """Verify success response has correct structure"""
-        from risk_classifier import PolicyClassification, RiskLevel
+        from src.risk_classifier import PolicyClassification, RiskLevel
 
         classification = PolicyClassification(
             hate_speech=RiskLevel.LOW,
@@ -194,7 +194,7 @@ class TestFormatSuccessResponse:
 
     def test_format_success_response_includes_risk_levels(self):
         """Verify success response includes risk levels"""
-        from risk_classifier import PolicyClassification, RiskLevel
+        from src.risk_classifier import PolicyClassification, RiskLevel
 
         classification = PolicyClassification(
             hate_speech=RiskLevel.LOW,
@@ -221,7 +221,7 @@ class TestFormatSuccessResponse:
 
     def test_format_success_response_includes_scores(self):
         """Verify success response includes detailed scores"""
-        from risk_classifier import PolicyClassification, RiskLevel
+        from src.risk_classifier import PolicyClassification, RiskLevel
 
         classification = PolicyClassification(
             hate_speech=RiskLevel.LOW,

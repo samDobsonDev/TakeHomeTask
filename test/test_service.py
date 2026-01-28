@@ -1,16 +1,16 @@
 import base64
 import pytest
-from service import (
+from src.service import (
     Modality,
     PredictionType,
     ModerationRequest,
     ModerationResult,
     ContentModerationService,
 )
-from preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo, TextPreprocessor, ImagePreprocessor, \
+from src.preprocessor import TextPreprocessor, ImagePreprocessor, \
     VideoPreprocessor
-from model import HateSpeechModel, SexualModel, ViolenceModel
-from risk_classifier import RiskLevel, PolicyClassification
+from src.model import HateSpeechModel, SexualModel, ViolenceModel
+from src.risk_classifier import RiskLevel, PolicyClassification
 
 
 class TestModality:
