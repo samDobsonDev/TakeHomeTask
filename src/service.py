@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from enum import Enum
 import base64
 import re
-from preprocessor import ContentPreprocessor, PreprocessedContent, PreprocessedText, PreprocessedImage, PreprocessedVideo
-from model import ContentModerationModel, ModelPrediction
-from risk_classifier import RiskClassifier, PolicyClassification, RiskLevel
+from src.preprocessor import ContentPreprocessor, PreprocessedContent, PreprocessedText, PreprocessedImage, PreprocessedVideo
+from src.model import ContentModerationModel, ModelPrediction
+from src.risk_classifier import RiskClassifier, PolicyClassification, RiskLevel
 
 
 class Modality(Enum):

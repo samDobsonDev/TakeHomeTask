@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 import random
 from dataclasses import dataclass, fields
 from typing import Generic, TypeVar
-from preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo, PreprocessedContent
-from aggregator import ScoreAggregator
+from src.preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo, PreprocessedContent
+from src.aggregator import ScoreAggregator
 
 
 @dataclass
@@ -69,6 +69,36 @@ class ContentModerationModel(ABC, Generic[PredictionType]):
     Each model evaluates content across different modalities (text, image, video)
     and returns raw metric scores.
     """
+
+    def __init_subclass__(cls, **kwargs):
+        """Validate that the declared PredictionType matches method return types"""
+        super().__init_subclass__(**kwargs)
+        # Only validate concrete implementations, not abstract intermediate classes
+        # A concrete class is one that doesn't have any abstract methods remaining
+        abstract_methods = getattr(cls, '__abstractmethods__', set())
+        if abstract_methods:
+            # This is still abstract, skip validation
+            return
+        # Get the declared PredictionType from the generic
+        if hasattr(cls, '__orig_bases__'):
+            for base in cls.__orig_bases__:
+                if hasattr(base, '__args__') and base.__args__:
+                    declared_type = base.__args__[0]
+                    # Only validate if declared_type is a concrete class, not a TypeVar
+                    from typing import TypeVar as TypeVarClass
+                    if not isinstance(declared_type, TypeVarClass):
+                        # This is a concrete type, validate it
+                        # Check predict_text return type
+                        if hasattr(cls, 'predict_text'):
+                            predict_text_method = cls.predict_text
+                            if hasattr(predict_text_method, '__annotations__'):
+                                return_type = predict_text_method.__annotations__.get('return')
+                                # Skip if return type is a TypeVar or matches declared type
+                                if return_type and not isinstance(return_type, TypeVarClass) and return_type != declared_type:
+                                    raise TypeError(
+                                        f"{cls.__name__} declares {declared_type.__name__} "
+                                        f"but predict_text returns {return_type.__name__ if hasattr(return_type, '__name__') else return_type}"
+                                    )
 
     @abstractmethod
     async def predict_text(self, input_data: PreprocessedText) -> PredictionType:

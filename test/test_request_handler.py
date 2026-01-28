@@ -6,9 +6,9 @@ from src.service import Modality, ModerationRequest
 from src.request_handler import (
     ServiceContainer,
     RequestHandler,
-    _parse_request,
-    _format_success_response,
-    _format_error_response,
+    parse_request,
+    format_success_response,
+    format_error_response,
 )
 
 
@@ -67,7 +67,7 @@ class TestParseRequest:
             "customer": "test_customer"
         }
 
-        result = _parse_request(request_data)
+        result = parse_request(request_data)
 
         assert isinstance(result, ModerationRequest)
         assert result.content == "test content"
@@ -82,7 +82,7 @@ class TestParseRequest:
             "customer": "test_customer"
         }
 
-        result = _parse_request(request_data)
+        result = parse_request(request_data)
 
         assert result.modality == Modality.IMAGE
 
@@ -94,7 +94,7 @@ class TestParseRequest:
             "customer": "test_customer"
         }
 
-        result = _parse_request(request_data)
+        result = parse_request(request_data)
 
         assert result.modality == Modality.VIDEO
 
@@ -106,7 +106,7 @@ class TestParseRequest:
         }
 
         with pytest.raises(KeyError):
-            _parse_request(request_data)
+            parse_request(request_data)
 
     def test_parse_missing_modality_field(self):
         """Verify missing modality raises KeyError"""
@@ -116,7 +116,7 @@ class TestParseRequest:
         }
 
         with pytest.raises(KeyError):
-            _parse_request(request_data)
+            parse_request(request_data)
 
     def test_parse_missing_customer_field(self):
         """Verify missing customer raises KeyError"""
@@ -126,7 +126,7 @@ class TestParseRequest:
         }
 
         with pytest.raises(KeyError):
-            _parse_request(request_data)
+            parse_request(request_data)
 
     def test_parse_invalid_modality(self):
         """Verify invalid modality raises ValueError"""
@@ -137,7 +137,7 @@ class TestParseRequest:
         }
 
         with pytest.raises(ValueError, match="Invalid modality"):
-            _parse_request(request_data)
+            parse_request(request_data)
 
     def test_parse_empty_content(self):
         """Verify empty content raises ValueError"""
@@ -148,7 +148,7 @@ class TestParseRequest:
         }
 
         with pytest.raises(ValueError, match="Content cannot be empty"):
-            _parse_request(request_data)
+            parse_request(request_data)
 
     def test_parse_none_content(self):
         """Verify None content raises ValueError"""
@@ -159,7 +159,7 @@ class TestParseRequest:
         }
 
         with pytest.raises(ValueError, match="Content cannot be empty"):
-            _parse_request(request_data)
+            parse_request(request_data)
 
 
 class TestFormatSuccessResponse:
@@ -186,7 +186,7 @@ class TestFormatSuccessResponse:
             "violence": mock_prediction
         }
 
-        response = _format_success_response(result_mock)
+        response = format_success_response(result_mock)
 
         assert response["status"] == "success"
         assert "data" in response
@@ -213,7 +213,7 @@ class TestFormatSuccessResponse:
             "violence": mock_prediction
         }
 
-        response = _format_success_response(result_mock)
+        response = format_success_response(result_mock)
 
         assert response["data"]["hate_speech"]["risk_level"] == "low"
         assert response["data"]["sexual"]["risk_level"] == "medium"
@@ -240,7 +240,7 @@ class TestFormatSuccessResponse:
             "violence": mock_prediction
         }
 
-        response = _format_success_response(result_mock)
+        response = format_success_response(result_mock)
 
         assert response["data"]["hate_speech"]["scores"]["metric1"] == 0.5
         assert response["data"]["hate_speech"]["scores"]["metric2"] == 0.3
@@ -251,7 +251,7 @@ class TestFormatErrorResponse:
 
     def test_format_error_response_structure(self):
         """Verify error response has correct structure"""
-        response = _format_error_response("Test error", 400)
+        response = format_error_response("Test error", 400)
 
         assert response["status"] == "error"
         assert response["error"] == "Test error"
@@ -259,13 +259,13 @@ class TestFormatErrorResponse:
 
     def test_format_error_response_400(self):
         """Verify 400 error response"""
-        response = _format_error_response("Bad request", 400)
+        response = format_error_response("Bad request", 400)
 
         assert response["status_code"] == 400
 
     def test_format_error_response_500(self):
         """Verify 500 error response"""
-        response = _format_error_response("Internal error", 500)
+        response = format_error_response("Internal error", 500)
 
         assert response["status_code"] == 500
 

@@ -2,13 +2,11 @@ import asyncio
 import base64
 import json
 from pathlib import Path
-
 import requests
-
-from content_loader import ContentLoader
-from service import ContentModerationService, ModerationRequest, Modality, ModerationResult
-from preprocessor import TextPreprocessor, ImagePreprocessor, VideoPreprocessor, ContentPreprocessor
-from model import HateSpeechModel, SexualModel, ViolenceModel, ContentModerationModel
+from src.content_loader import ContentLoader
+from src.service import ContentModerationService, ModerationRequest, Modality, ModerationResult
+from src.preprocessor import TextPreprocessor, ImagePreprocessor, VideoPreprocessor, ContentPreprocessor
+from src.model import HateSpeechModel, SexualModel, ViolenceModel, ContentModerationModel
 
 
 class ServiceContainer:
@@ -57,7 +55,7 @@ class ServiceContainer:
         return self._service
 
 
-def _parse_request(request_data: dict) -> ModerationRequest:
+def parse_request(request_data: dict) -> ModerationRequest:
     """
     Parse and validate request data.
 
@@ -95,7 +93,7 @@ def _parse_request(request_data: dict) -> ModerationRequest:
     )
 
 
-def _format_success_response(result: ModerationResult) -> dict:
+def format_success_response(result: ModerationResult) -> dict:
     """
     Format successful moderation result as response.
 
@@ -117,7 +115,7 @@ def _format_success_response(result: ModerationResult) -> dict:
     }
 
 
-def _format_error_response(error_message: str, status_code: int) -> dict:
+def format_error_response(error_message: str, status_code: int) -> dict:
     """
     Format error response.
 
@@ -170,18 +168,18 @@ class RequestHandler:
         try:
             # Parse request
             request_data = json.loads(request_body)
-            moderation_request: ModerationRequest = _parse_request(request_data)
+            moderation_request: ModerationRequest = parse_request(request_data)
             # Process
             result: ModerationResult = await self.service.moderate(moderation_request)
             # Format response
-            return _format_success_response(result)
+            return format_success_response(result)
 
         except ValueError as e:
-            return _format_error_response(str(e), 400)
+            return format_error_response(str(e), 400)
         except KeyError as e:
-            return _format_error_response(f"Missing required field: {str(e)}", 400)
+            return format_error_response(f"Missing required field: {str(e)}", 400)
         except Exception as e:
-            return _format_error_response(f"Internal error: {str(e)}", 500)
+            return format_error_response(f"Internal error: {str(e)}", 500)
 
 
 async def moderate_image_from_url():

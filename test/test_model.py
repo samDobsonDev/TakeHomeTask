@@ -52,7 +52,7 @@ class TestModelPredictionToDict:
 
     def test_hate_speech_prediction_to_dict(self):
         """Verify HateSpeechPrediction.to_dict() excludes input_data"""
-        preprocessed = PreprocessedText(data=[1, 2, 3])
+        preprocessed = PreprocessedText(data=[1, 2, 3], original_text="test text")
         prediction = HateSpeechPrediction(
             input_data=preprocessed,
             toxicity=0.5,
@@ -72,7 +72,7 @@ class TestModelPredictionToDict:
 
     def test_sexual_prediction_to_dict(self):
         """Verify SexualPrediction.to_dict() excludes input_data"""
-        preprocessed = PreprocessedText(data=[1, 2, 3])
+        preprocessed = PreprocessedText(data=[1, 2, 3], original_text="test text")
         prediction = SexualPrediction(
             input_data=preprocessed,
             sexual_explicit=0.1,
@@ -88,7 +88,7 @@ class TestModelPredictionToDict:
 
     def test_violence_prediction_to_dict(self):
         """Verify ViolencePrediction.to_dict() excludes input_data"""
-        preprocessed = PreprocessedText(data=[1, 2, 3])
+        preprocessed = PreprocessedText(data=[1, 2, 3], original_text="test text")
         prediction = ViolencePrediction(
             input_data=preprocessed,
             violence=0.7,
@@ -127,7 +127,7 @@ class TestMockModelPredictions:
     async def test_hate_speech_model_predict_text_returns_valid_scores(self):
         """Verify HateSpeechModel.predict_text returns valid scores"""
         model = HateSpeechModel()
-        preprocessed = PreprocessedText(data=[1] * 16)
+        preprocessed = PreprocessedText(data=[1] * 16, original_text="test text")
 
         prediction = await model.predict_text(preprocessed)
 
@@ -142,7 +142,7 @@ class TestMockModelPredictions:
     async def test_sexual_model_predict_image_returns_valid_scores(self):
         """Verify SexualModel.predict_image returns valid scores"""
         model = SexualModel()
-        preprocessed = PreprocessedImage(data=[1] * 16)
+        preprocessed = PreprocessedImage(data=[1] * 16, original_bytes=b"test image")
 
         prediction = await model.predict_image(preprocessed)
 
@@ -154,7 +154,7 @@ class TestMockModelPredictions:
     async def test_violence_model_predict_image_returns_valid_scores(self):
         """Verify ViolenceModel.predict_image returns valid scores"""
         model = ViolenceModel()
-        preprocessed = PreprocessedImage(data=[1] * 16)
+        preprocessed = PreprocessedImage(data=[1] * 16, original_bytes=b"test image")
 
         prediction = await model.predict_image(preprocessed)
 
@@ -166,8 +166,8 @@ class TestMockModelPredictions:
     async def test_hate_speech_model_predict_video_averages_frame_scores(self):
         """Verify predict_video averages frame predictions"""
         model = HateSpeechModel()
-        frame1 = PreprocessedImage(data=[1] * 16)
-        frame2 = PreprocessedImage(data=[2] * 16)
+        frame1 = PreprocessedImage(data=[1] * 16, original_bytes=b"frame1")
+        frame2 = PreprocessedImage(data=[2] * 16, original_bytes=b"frame2")
         video = PreprocessedVideo(frames=[frame1, frame2])
 
         prediction = await model.predict_video(video)
@@ -179,17 +179,17 @@ class TestMockModelPredictions:
 
     async def test_all_models_predict_video_returns_correct_type(self):
         """Verify all models return correct type from predict_video"""
-        frame = PreprocessedImage(data=[1] * 16)
+        frame = PreprocessedImage(data=[1] * 16, original_bytes=b"frame")
         video = PreprocessedVideo(frames=[frame])
 
         hate_model = HateSpeechModel()
-        hate_pred = await hate_model.predict_video(video)
-        assert isinstance(hate_pred, HateSpeechPrediction)
+        hate_prediction = await hate_model.predict_video(video)
+        assert isinstance(hate_prediction, HateSpeechPrediction)
 
         sexual_model = SexualModel()
-        sexual_pred = await sexual_model.predict_video(video)
-        assert isinstance(sexual_pred, SexualPrediction)
+        sexual_prediction = await sexual_model.predict_video(video)
+        assert isinstance(sexual_prediction, SexualPrediction)
 
         violence_model = ViolenceModel()
-        violence_pred = await violence_model.predict_video(video)
-        assert isinstance(violence_pred, ViolencePrediction)
+        violence_prediction = await violence_model.predict_video(video)
+        assert isinstance(violence_prediction, ViolencePrediction)
