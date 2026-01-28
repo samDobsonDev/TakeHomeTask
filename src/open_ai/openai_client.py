@@ -1,10 +1,10 @@
 import base64
 from openai import OpenAI
 from pydantic import BaseModel
-from src.content_analysis_client import ContentAnalysisClient
+from src.llm_client import LLMClient
 
 
-class OpenAIClient(ContentAnalysisClient):
+class OpenAIClient(LLMClient):
     """
     ContentAnalysisClient for interacting with OpenAI API.
 

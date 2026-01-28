@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from pydantic import BaseModel
 
 
-class ContentAnalysisClient(ABC):
+class LLMClient(ABC):
     """
     Abstract interface for LLM-based content analysis clients.
 
