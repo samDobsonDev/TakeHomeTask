@@ -1,11 +1,9 @@
 import os
 from typing import cast
-
 import pytest
 import requests
 import base64
 from dotenv import load_dotenv
-
 from model import ViolencePrediction
 from openai_violence_model import OpenAIViolenceModel
 from preprocessor import PreprocessedText, PreprocessedImage, TextPreprocessor, ImagePreprocessor, VideoPreprocessor
