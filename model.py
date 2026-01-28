@@ -1,0 +1,162 @@
+from abc import ABC, abstractmethod
+import random
+from dataclasses import dataclass, fields
+from typing import Generic, TypeVar
+from preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo, PreprocessedContent
+from aggregator import ScoreAggregator
+
+
+@dataclass
+class ModelPrediction(ABC):
+    """Base class for model predictions"""
+    input_data: PreprocessedContent
+
+    @classmethod
+    @abstractmethod
+    def get_category(cls) -> str:
+        """Return the category name for this prediction"""
+        pass
+
+    def to_dict(self) -> dict[str, float]:
+        """Convert prediction to dictionary format"""
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name != 'input_data'}
+
+PredictionType = TypeVar('PredictionType', bound=ModelPrediction)
+
+@dataclass
+class HateSpeechPrediction(ModelPrediction):
+    """Prediction result from hate speech model"""
+    toxicity: float
+    severe_toxicity: float
+    obscene: float
+    insult: float
+    identity_attack: float
+    threat: float
+
+    @classmethod
+    def get_category(cls) -> str:
+        return "hate_speech"
+
+
+@dataclass
+class SexualPrediction(ModelPrediction):
+    """Prediction result from sexual content model"""
+    sexual_explicit: float
+    adult_content: float
+    adult_toys: float
+
+    @classmethod
+    def get_category(cls) -> str:
+        return "sexual"
+
+
+@dataclass
+class ViolencePrediction(ModelPrediction):
+    """Prediction result from violence model"""
+    violence: float
+    firearm: float
+    knife: float
+
+    @classmethod
+    def get_category(cls) -> str:
+        return "violence"
+
+
+class ContentModerationModel(ABC, Generic[PredictionType]):
+    """
+    Abstract base class for content moderation models.
+
+    Each model evaluates content across different modalities (text, image, video)
+    and returns raw metric scores.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        """Validate that the model uses the correct prediction type"""
+        super().__init_subclass__(**kwargs)
+        # Get the generic type parameter
+        if hasattr(cls, '__orig_bases__'):
+            for base in cls.__orig_bases__:
+                if hasattr(base, '__args__'):
+                    expected_type = base.__args__[0]
+                    # Get the actual return types from the methods
+                    from typing import get_type_hints
+                    try:
+                        hints = get_type_hints(cls.predict_text)
+                        actual_type = hints.get('return')
+                        if actual_type and actual_type != expected_type:
+                            raise TypeError(
+                                f"{cls.__name__} declares {expected_type.__name__} "
+                                f"but predict_text returns {actual_type.__name__}"
+                            )
+                    except Exception as e:
+                        if isinstance(e, TypeError):
+                            raise
+
+    @abstractmethod
+    async def predict_text(self, input_data: PreprocessedText) -> PredictionType:
+        pass
+
+    @abstractmethod
+    async def predict_image(self, input_data: PreprocessedImage) -> PredictionType:
+        pass
+
+    async def predict_video(self, input_data: PreprocessedVideo) -> PredictionType:
+        """
+        Default implementation: process each frame and average scores.
+
+        Override if custom video handling is needed.
+        """
+        frame_predictions = []
+        for frame in input_data.frames:
+            prediction = await self.predict_image(frame)
+            frame_predictions.append(prediction.to_dict())
+        aggregated_scores = ScoreAggregator.average_scores(frame_predictions)
+        # Extract the prediction class from the generic type
+        if hasattr(self.__class__, '__orig_bases__'):
+            for base in self.__class__.__orig_bases__:
+                if hasattr(base, '__args__'):
+                    prediction_class = base.__args__[0]
+                    return prediction_class(input_data=input_data, **aggregated_scores)
+        # Fallback (should not reach here if used correctly)
+        raise TypeError("Could not determine prediction class type")
+
+def _generate_random_scores(prediction_class: type[ModelPrediction]) -> dict[str, float]:
+    """Generate random scores for all metrics in a prediction class"""
+    metrics = [f.name for f in fields(prediction_class) if f.name != 'input_data']
+    return {metric: random.random() for metric in metrics}
+
+
+class HateSpeechModel(ContentModerationModel[HateSpeechPrediction]):
+    """Model for detecting hate speech and toxic content"""
+
+    async def predict_text(self, input_data: PreprocessedText) -> HateSpeechPrediction:
+        scores = _generate_random_scores(HateSpeechPrediction)
+        return HateSpeechPrediction(input_data=input_data, **scores)
+
+    async def predict_image(self, input_data: PreprocessedImage) -> HateSpeechPrediction:
+        scores = _generate_random_scores(HateSpeechPrediction)
+        return HateSpeechPrediction(input_data=input_data, **scores)
+
+
+class SexualModel(ContentModerationModel[SexualPrediction]):
+    """Model for detecting sexual content"""
+
+    async def predict_text(self, input_data: PreprocessedText) -> SexualPrediction:
+        scores = _generate_random_scores(SexualPrediction)
+        return SexualPrediction(input_data=input_data, **scores)
+
+    async def predict_image(self, input_data: PreprocessedImage) -> SexualPrediction:
+        scores = _generate_random_scores(SexualPrediction)
+        return SexualPrediction(input_data=input_data, **scores)
+
+
+class ViolenceModel(ContentModerationModel[ViolencePrediction]):
+    """Model for detecting violent content"""
+
+    async def predict_text(self, input_data: PreprocessedText) -> ViolencePrediction:
+        scores = _generate_random_scores(ViolencePrediction)
+        return ViolencePrediction(input_data=input_data, **scores)
+
+    async def predict_image(self, input_data: PreprocessedImage) -> ViolencePrediction:
+        scores = _generate_random_scores(ViolencePrediction)
+        return ViolencePrediction(input_data=input_data, **scores)
