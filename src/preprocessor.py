@@ -13,13 +13,14 @@ class PreprocessedContent:
 class PreprocessedText(PreprocessedContent):
     """Preprocessed text content"""
     data: list[int]
+    original_text: str
 
 
 @dataclass
 class PreprocessedImage(PreprocessedContent):
     """Preprocessed image content"""
     data: list[int]
-    original_bytes: bytes = None
+    original_bytes: bytes
 
 
 @dataclass
@@ -52,7 +53,7 @@ class TextPreprocessor(ContentPreprocessor):
     def preprocess(self, content: str) -> PreprocessedText:
         """Convert text to numeric vector"""
         data = [random.randint(1, 100)] * 16
-        return PreprocessedText(data=data)
+        return PreprocessedText(data=data, original_text=content)
 
 
 class FrameBasedPreprocessor(ContentPreprocessor, ABC):
@@ -91,5 +92,5 @@ class VideoPreprocessor(FrameBasedPreprocessor):
 
     def preprocess(self, content: list[bytes]) -> PreprocessedVideo:
         """Process all frames, returning one PreprocessedImage per frame"""
-        frames = [PreprocessedImage(data=self.preprocess_frame(frame)) for frame in content]
+        frames = [PreprocessedImage(data=self.preprocess_frame(frame), original_bytes=frame) for frame in content]
         return PreprocessedVideo(frames=frames)

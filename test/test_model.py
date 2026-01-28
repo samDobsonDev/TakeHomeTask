@@ -1,7 +1,6 @@
 import pytest
 from dataclasses import fields
-from model import (
-    ModelPrediction,
+from src.model import (
     HateSpeechPrediction,
     SexualPrediction,
     ViolencePrediction,
@@ -10,7 +9,7 @@ from model import (
     SexualModel,
     ViolenceModel,
 )
-from preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo
+from src.preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo
 
 
 class TestModelPredictionDataclasses:

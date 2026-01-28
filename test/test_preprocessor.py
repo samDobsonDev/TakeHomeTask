@@ -1,9 +1,8 @@
-from preprocessor import (
+from src.preprocessor import (
     PreprocessedContent,
     PreprocessedText,
     PreprocessedImage,
     PreprocessedVideo,
-    ContentPreprocessor,
     TextPreprocessor,
     ImagePreprocessor,
     VideoPreprocessor,
@@ -16,9 +15,11 @@ class TestPreprocessedDataclasses:
     def test_preprocessed_text_creation(self):
         """Verify PreprocessedText can be created with data"""
         data = [1, 2, 3, 4, 5]
-        preprocessed = PreprocessedText(data=data)
+        original_text = "This is the original text"
+        preprocessed = PreprocessedText(data=data, original_text=original_text)
 
         assert preprocessed.data == data
+        assert preprocessed.original_text == original_text
         assert isinstance(preprocessed, PreprocessedContent)
 
     def test_preprocessed_image_creation(self):
@@ -31,18 +32,12 @@ class TestPreprocessedDataclasses:
         assert preprocessed.original_bytes == original_bytes
         assert isinstance(preprocessed, PreprocessedContent)
 
-    def test_preprocessed_image_without_original_bytes(self):
-        """Verify PreprocessedImage works without original_bytes"""
-        data = [1] * 16
-        preprocessed = PreprocessedImage(data=data)
-
-        assert preprocessed.data == data
-        assert preprocessed.original_bytes is None
-
     def test_preprocessed_video_creation(self):
         """Verify PreprocessedVideo can be created with frames"""
-        frame1 = PreprocessedImage(data=[1] * 16)
-        frame2 = PreprocessedImage(data=[2] * 16)
+        frame1_bytes = b"frame1_bytes"
+        frame2_bytes = b"frame2_bytes"
+        frame1 = PreprocessedImage(data=[1] * 16, original_bytes=frame1_bytes)
+        frame2 = PreprocessedImage(data=[2] * 16, original_bytes=frame2_bytes)
         frames = [frame1, frame2]
 
         video = PreprocessedVideo(frames=frames)
@@ -50,6 +45,9 @@ class TestPreprocessedDataclasses:
         assert video.frames == frames
         assert len(video.frames) == 2
         assert isinstance(video, PreprocessedContent)
+        # Verify original bytes are preserved in frames
+        assert video.frames[0].original_bytes == frame1_bytes
+        assert video.frames[1].original_bytes == frame2_bytes
 
     def test_preprocessed_video_empty_frames(self):
         """Verify PreprocessedVideo can be created with empty frames"""

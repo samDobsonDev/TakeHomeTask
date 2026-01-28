@@ -1,6 +1,6 @@
 import pytest
 
-from risk_classifier import RiskLevel, PolicyClassification, RiskClassifier
+from src.risk_classifier import RiskLevel, PolicyClassification, RiskClassifier
 
 
 class TestRiskClassifierClassifyScore:
