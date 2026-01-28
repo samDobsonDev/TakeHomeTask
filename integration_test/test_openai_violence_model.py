@@ -2,7 +2,7 @@ import os
 import pytest
 import requests
 from dotenv import load_dotenv
-from .openai_violence_model import OpenAIViolenceModel
+from openai_violence_model import OpenAIViolenceModel
 from preprocessor import PreprocessedText, PreprocessedImage
 
 load_dotenv()

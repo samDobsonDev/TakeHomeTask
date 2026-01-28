@@ -1,8 +1,9 @@
 import base64
+from dataclasses import fields
 from openai import OpenAI
 from pydantic import BaseModel
 from model import ContentModerationModel, ViolencePrediction
-from preprocessor import PreprocessedImage, PreprocessedText, PreprocessedVideo
+from preprocessor import PreprocessedImage, PreprocessedText
 
 
 class ViolenceScores(BaseModel):
@@ -50,9 +51,10 @@ class OpenAIViolenceModel(ContentModerationModel[ViolencePrediction]):
         )
         # Get parsed output
         scores_obj = response.output_parsed
+        # Extract scores dynamically from prediction class fields
+        metric_names = [f.name for f in fields(ViolencePrediction) if f.name != 'input_data']
         scores = {
-            "violence": max(0.0, min(1.0, scores_obj.violence)),
-            "firearm": max(0.0, min(1.0, scores_obj.firearm)),
-            "knife": max(0.0, min(1.0, scores_obj.knife)),
+            metric: max(0.0, min(1.0, getattr(scores_obj, metric)))
+            for metric in metric_names
         }
         return ViolencePrediction(input_data=input_data, **scores)

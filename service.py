@@ -173,7 +173,7 @@ class ContentModerationService:
         if request.modality.value not in self.preprocessors:
             raise ValueError(f"Unsupported modality: {request.modality.value}")
         decoded_content = _decode_content(request.content, request.modality)
-        preprocessed_content = self.preprocessors[request.modality.value].preprocess(decoded_content)
+        preprocessed_content: PreprocessedContent = self.preprocessors[request.modality.value].preprocess(decoded_content)
         model_predictions = await self._run_all_models(preprocessed_content)
         policy_classification: PolicyClassification = _classify_policies(model_predictions)
         return ModerationResult(

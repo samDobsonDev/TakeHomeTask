@@ -1,8 +1,11 @@
 import asyncio
 import base64
 import json
+from pathlib import Path
+
 import requests
-from integration_test.openai_violence_model import OpenAIViolenceModel
+
+from content_loader import ContentLoader
 from service import ContentModerationService, ModerationRequest, Modality, ModerationResult
 from preprocessor import TextPreprocessor, ImagePreprocessor, VideoPreprocessor, ContentPreprocessor
 from model import HateSpeechModel, SexualModel, ViolenceModel, ContentModerationModel
@@ -167,9 +170,9 @@ class RequestHandler:
         try:
             # Parse request
             request_data = json.loads(request_body)
-            moderation_request = _parse_request(request_data)
+            moderation_request: ModerationRequest = _parse_request(request_data)
             # Process
-            result = await self.service.moderate(moderation_request)
+            result: ModerationResult = await self.service.moderate(moderation_request)
             # Format response
             return _format_success_response(result)
 
@@ -181,7 +184,11 @@ class RequestHandler:
             return _format_error_response(f"Internal error: {str(e)}", 500)
 
 
-async def main():
+async def moderate_image_from_url():
+    """Example 1: Download image from URL and moderate"""
+    print("=" * 60)
+    print("Example 1: Moderate Image from URL")
+    print("=" * 60)
     image_url = "https://t3.ftcdn.net/jpg/03/21/62/56/360_F_321625657_rauGwvaYjtbETuwxn9kpBWKDYrVUMdB4.jpg"
     try:
         response = requests.get(image_url)
@@ -199,6 +206,37 @@ async def main():
         print(f"Failed to download image: {e}")
     except Exception as e:
         print(f"Error: {e}")
+
+
+async def moderate_image_from_local_file():
+    """Example 2: Load image from local resources and moderate"""
+    print("\n" + "=" * 60)
+    print("Example 2: Moderate Image from Local File")
+    print("=" * 60)
+    try:
+        # Load image using ContentLoader
+        image_path = Path(__file__).parent / "resources" / "gun.png"
+        image_bytes = ContentLoader.load_image(image_path)
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        handler = RequestHandler()
+        request_json = json.dumps({
+            "content": base64_image,
+            "modality": "image",
+            "customer": "test_customer"
+        })
+        moderation_response = await handler.handle_moderate_request(request_json)
+        print(json.dumps(moderation_response, indent=2))
+    except FileNotFoundError as e:
+        print(f"Local image file not found: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+async def main():
+    # Example 1: From URL
+    await moderate_image_from_url()
+    # Example 2: From local file
+    await moderate_image_from_local_file()
 
 
 if __name__ == "__main__":
