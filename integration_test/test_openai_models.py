@@ -3,7 +3,6 @@ import pytest
 import requests
 import base64
 from dotenv import load_dotenv
-
 from src.model import ViolencePrediction
 from src.open_ai.openai_models import OpenAIHateSpeechModel, OpenAISexualModel, OpenAIViolenceModel
 from src.preprocessor import PreprocessedText, PreprocessedImage, TextPreprocessor, ImagePreprocessor, PreprocessedVideo

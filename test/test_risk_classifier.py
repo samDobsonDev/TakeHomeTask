@@ -1,5 +1,4 @@
 import pytest
-
 from src.risk_classifier import RiskLevel, PolicyClassification, RiskClassifier
 
 
