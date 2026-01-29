@@ -12,17 +12,11 @@ class RiskLevel(Enum):
 @dataclass
 class PolicyClassification:
     """Final policy classification result"""
-    hate_speech: RiskLevel
-    sexual: RiskLevel
-    violence: RiskLevel
+    classifications: dict[str, RiskLevel]
 
     def to_dict(self) -> dict[str, str]:
         """Convert to dictionary format"""
-        return {
-            "hate_speech": self.hate_speech.value,
-            "sexual": self.sexual.value,
-            "violence": self.violence.value
-        }
+        return {key: value.value for key, value in self.classifications.items()}
 
 
 class RiskClassifier:

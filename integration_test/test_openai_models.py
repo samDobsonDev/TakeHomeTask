@@ -3,8 +3,10 @@ import pytest
 import requests
 import base64
 from dotenv import load_dotenv
+
+from src.model import ViolencePrediction
 from src.open_ai.openai_models import OpenAIHateSpeechModel, OpenAISexualModel, OpenAIViolenceModel
-from src.preprocessor import PreprocessedText, PreprocessedImage, TextPreprocessor, ImagePreprocessor
+from src.preprocessor import PreprocessedText, PreprocessedImage, TextPreprocessor, ImagePreprocessor, PreprocessedVideo
 from src.service import ContentModerationService, Modality, ModerationRequest
 from src.risk_classifier import RiskLevel
 
@@ -124,6 +126,36 @@ class TestOpenAIViolenceModel:
         assert prediction is not None
         assert prediction.firearm < 0.5, f"Expected firearm score < 0.5, got {prediction.firearm}"
 
+    @pytest.mark.asyncio
+    async def test_analyze_video_batch_api_with_5_frames(self):
+        """Test violence prediction on video with 5 frames"""
+        model = OpenAIViolenceModel(api_key=OPENAI_API_KEY)
+        gun_image_bytes = fetch_image_from_url(
+            "https://t3.ftcdn.net/jpg/03/21/62/56/360_F_321625657_rauGwvaYjtbETuwxn9kpBWKDYrVUMdB4.jpg"
+        )
+        frames = [
+            PreprocessedImage(
+                original_bytes=gun_image_bytes,
+                data=[1] * 16
+            )
+            for _ in range(5)
+        ]
+        video = PreprocessedVideo(frames=frames)
+        predictions = await model.predict_video(video)
+
+        assert predictions is not None
+        assert isinstance(predictions, list)
+        assert len(predictions) == 5
+        for prediction in predictions:
+            assert isinstance(prediction, ViolencePrediction)
+            assert all(0 <= getattr(prediction, field) <= 1 for field in [
+                'violence', 'firearm', 'knife'
+            ])
+            # At least one violence metric should be non-zero for gun image
+            assert any(getattr(prediction, field) > 0 for field in [
+                'violence', 'firearm', 'knife'
+            ])
+
 
 class TestFullPipelineWithOpenAIModels:
     """Integration tests for full moderation pipeline with OpenAI models"""
@@ -159,7 +191,6 @@ class TestFullPipelineWithOpenAIModels:
         response = requests.get(image_url)
         response.raise_for_status()
         base64_image = base64.b64encode(response.content).decode('utf-8')
-
         request = ModerationRequest(
             content=base64_image,
             modality=Modality.IMAGE,
@@ -168,4 +199,5 @@ class TestFullPipelineWithOpenAIModels:
         result = await service.moderate(request)
 
         assert result is not None
-        assert result.policy_classification.violence in {RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH}
+        assert "violence" in result.policy_classification.classifications
+        assert result.policy_classification.classifications["violence"] in {RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH}

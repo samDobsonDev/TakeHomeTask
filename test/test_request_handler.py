@@ -19,9 +19,7 @@ class TestServiceContainer:
         """Verify preprocessors are lazy-loaded"""
         container = ServiceContainer()
         assert container._preprocessors is None
-
         preprocessors = container.preprocessors
-
         assert preprocessors is not None
         assert "text" in preprocessors
         assert "image" in preprocessors
@@ -31,9 +29,7 @@ class TestServiceContainer:
         """Verify models are lazy-loaded"""
         container = ServiceContainer()
         assert container._models is None
-
         models = container.models
-
         assert models is not None
         assert len(models) == 3
 
@@ -49,7 +45,6 @@ class TestServiceContainer:
     def test_container_reuses_instances(self):
         """Verify container reuses instances"""
         container = ServiceContainer()
-
         preprocessors1 = container.preprocessors
         preprocessors2 = container.preprocessors
 
@@ -57,7 +52,7 @@ class TestServiceContainer:
 
 
 class TestParseRequest:
-    """Test _parse_request helper function"""
+    """Test parse_request helper function"""
 
     def test_parse_valid_text_request(self):
         """Verify parsing valid text request"""
@@ -66,7 +61,6 @@ class TestParseRequest:
             "modality": "text",
             "customer": "test_customer"
         }
-
         result = parse_request(request_data)
 
         assert isinstance(result, ModerationRequest)
@@ -81,22 +75,24 @@ class TestParseRequest:
             "modality": "image",
             "customer": "test_customer"
         }
-
         result = parse_request(request_data)
 
         assert result.modality == Modality.IMAGE
 
     def test_parse_valid_video_request(self):
-        """Verify parsing valid video request"""
+        """Verify parsing valid video request with list of frames"""
+        frame1_b64 = base64.b64encode(b"frame1").decode('utf-8')
+        frame2_b64 = base64.b64encode(b"frame2").decode('utf-8')
         request_data = {
-            "content": base64.b64encode(b"video").decode('utf-8'),
+            "content": [frame1_b64, frame2_b64],
             "modality": "video",
             "customer": "test_customer"
         }
-
         result = parse_request(request_data)
 
         assert result.modality == Modality.VIDEO
+        assert isinstance(result.content, list)
+        assert len(result.content) == 2
 
     def test_parse_missing_content_field(self):
         """Verify missing content raises KeyError"""
@@ -150,104 +146,96 @@ class TestParseRequest:
         with pytest.raises(ValueError, match="Content cannot be empty"):
             parse_request(request_data)
 
-    def test_parse_none_content(self):
-        """Verify None content raises ValueError"""
+    def test_parse_empty_video_content(self):
+        """Verify empty video content raises ValueError"""
         request_data = {
-            "content": None,
-            "modality": "text",
+            "content": [],
+            "modality": "video",
             "customer": "test"
         }
 
-        with pytest.raises(ValueError, match="Content cannot be empty"):
+        with pytest.raises(ValueError, match="Video content cannot be empty"):
+            parse_request(request_data)
+
+    def test_parse_video_content_not_list(self):
+        """Verify non-list video content raises ValueError"""
+        request_data = {
+            "content": "single_frame_b64",
+            "modality": "video",
+            "customer": "test"
+        }
+
+        with pytest.raises(ValueError, match="Video content must be a list"):
             parse_request(request_data)
 
 
 class TestFormatSuccessResponse:
-    """Test _format_success_response helper function"""
+    """Test format_success_response helper function"""
 
-    def test_format_success_response_structure(self):
-        """Verify success response has correct structure"""
-        from src.risk_classifier import PolicyClassification, RiskLevel
-
-        classification = PolicyClassification(
-            hate_speech=RiskLevel.LOW,
-            sexual=RiskLevel.MEDIUM,
-            violence=RiskLevel.HIGH
-        )
-
+    def test_format_success_response_single_prediction_structure(self):
+        """Verify success response has correct structure for single prediction"""
         mock_prediction = MagicMock()
         mock_prediction.to_dict.return_value = {"metric1": 0.5}
-
-        result_mock = MagicMock()
-        result_mock.policy_classification = classification
-        result_mock.model_predictions = {
+        predictions = {
             "hate_speech": mock_prediction,
             "sexual": mock_prediction,
             "violence": mock_prediction
         }
-
-        response = format_success_response(result_mock)
+        response = format_success_response(predictions)
 
         assert response["status"] == "success"
-        assert "data" in response
-        assert "hate_speech" in response["data"]
+        assert "results" in response
+        assert "hate_speech" in response["results"]
 
     def test_format_success_response_includes_risk_levels(self):
         """Verify success response includes risk levels"""
-        from src.risk_classifier import PolicyClassification, RiskLevel
-
-        classification = PolicyClassification(
-            hate_speech=RiskLevel.LOW,
-            sexual=RiskLevel.MEDIUM,
-            violence=RiskLevel.HIGH
-        )
-
         mock_prediction = MagicMock()
         mock_prediction.to_dict.return_value = {"metric": 0.5}
-
-        result_mock = MagicMock()
-        result_mock.policy_classification = classification
-        result_mock.model_predictions = {
+        predictions = {
             "hate_speech": mock_prediction,
             "sexual": mock_prediction,
             "violence": mock_prediction
         }
+        response = format_success_response(predictions)
 
-        response = format_success_response(result_mock)
-
-        assert response["data"]["hate_speech"]["risk_level"] == "low"
-        assert response["data"]["sexual"]["risk_level"] == "medium"
-        assert response["data"]["violence"]["risk_level"] == "high"
+        assert "risk_level" in response["results"]["hate_speech"]
+        assert "risk_level" in response["results"]["sexual"]
+        assert "risk_level" in response["results"]["violence"]
 
     def test_format_success_response_includes_scores(self):
         """Verify success response includes detailed scores"""
-        from src.risk_classifier import PolicyClassification, RiskLevel
-
-        classification = PolicyClassification(
-            hate_speech=RiskLevel.LOW,
-            sexual=RiskLevel.MEDIUM,
-            violence=RiskLevel.HIGH
-        )
-
         mock_prediction = MagicMock()
         mock_prediction.to_dict.return_value = {"metric1": 0.5, "metric2": 0.3}
-
-        result_mock = MagicMock()
-        result_mock.policy_classification = classification
-        result_mock.model_predictions = {
+        predictions = {
             "hate_speech": mock_prediction,
             "sexual": mock_prediction,
             "violence": mock_prediction
         }
+        response = format_success_response(predictions)
 
-        response = format_success_response(result_mock)
+        assert response["results"]["hate_speech"]["scores"]["metric1"] == 0.5
+        assert response["results"]["hate_speech"]["scores"]["metric2"] == 0.3
 
-        assert response["data"]["hate_speech"]["scores"]["metric1"] == 0.5
-        assert response["data"]["hate_speech"]["scores"]["metric2"] == 0.3
+    def test_format_success_response_video_predictions(self):
+        """Verify success response for video predictions with frames"""
+        mock_prediction1 = MagicMock()
+        mock_prediction1.to_dict.return_value = {"metric": 0.3}
+        mock_prediction2 = MagicMock()
+        mock_prediction2.to_dict.return_value = {"metric": 0.7}
+        predictions = {
+            "hate_speech": [mock_prediction1, mock_prediction2]
+        }
+        response = format_success_response(predictions)
+
+        assert response["status"] == "success"
+        assert "frames" in response["results"]["hate_speech"]
+        assert len(response["results"]["hate_speech"]["frames"]) == 2
+        assert response["results"]["hate_speech"]["frames"][0]["frame"] == 0
+        assert response["results"]["hate_speech"]["frames"][1]["frame"] == 1
 
 
 class TestFormatErrorResponse:
-    """Test _format_error_response helper function"""
+    """Test format_error_response helper function"""
 
     def test_format_error_response_structure(self):
         """Verify error response has correct structure"""
@@ -291,23 +279,36 @@ class TestRequestHandler:
     async def test_handle_moderate_request_valid_text(self):
         """Verify handling valid text moderation request"""
         handler = RequestHandler()
-
         request_json = json.dumps({
             "content": "test content",
             "modality": "text",
             "customer": "test_customer"
         })
-
         response = await handler.handle_moderate_request(request_json)
 
         assert response["status"] == "success"
-        assert "data" in response
+        assert "results" in response
+
+    @pytest.mark.asyncio
+    async def test_handle_moderate_request_valid_video(self):
+        """Verify handling valid video moderation request"""
+        handler = RequestHandler()
+        frame1_b64 = base64.b64encode(b"frame1").decode('utf-8')
+        frame2_b64 = base64.b64encode(b"frame2").decode('utf-8')
+        request_json = json.dumps({
+            "content": [frame1_b64, frame2_b64],
+            "modality": "video",
+            "customer": "test_customer"
+        })
+        response = await handler.handle_moderate_request(request_json)
+
+        assert response["status"] == "success"
+        assert "results" in response
 
     @pytest.mark.asyncio
     async def test_handle_moderate_request_invalid_json(self):
         """Verify handling invalid JSON request"""
         handler = RequestHandler()
-
         response = await handler.handle_moderate_request("invalid json")
 
         assert response["status"] == "error"
@@ -317,13 +318,11 @@ class TestRequestHandler:
     async def test_handle_moderate_request_missing_field(self):
         """Verify handling request with missing field"""
         handler = RequestHandler()
-
         request_json = json.dumps({
             "content": "test",
             "modality": "text"
             # Missing customer field
         })
-
         response = await handler.handle_moderate_request(request_json)
 
         assert response["status"] == "error"
@@ -334,13 +333,11 @@ class TestRequestHandler:
     async def test_handle_moderate_request_invalid_modality(self):
         """Verify handling request with invalid modality"""
         handler = RequestHandler()
-
         request_json = json.dumps({
             "content": "test",
             "modality": "invalid",
             "customer": "test"
         })
-
         response = await handler.handle_moderate_request(request_json)
 
         assert response["status"] == "error"
@@ -350,15 +347,27 @@ class TestRequestHandler:
     async def test_handle_moderate_request_empty_content(self):
         """Verify handling request with empty content"""
         handler = RequestHandler()
-
         request_json = json.dumps({
             "content": "",
             "modality": "text",
             "customer": "test"
         })
-
         response = await handler.handle_moderate_request(request_json)
 
         assert response["status"] == "error"
         assert response["status_code"] == 400
         assert "empty" in response["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_handle_moderate_request_video_not_list(self):
+        """Verify handling video request with non-list content"""
+        handler = RequestHandler()
+        request_json = json.dumps({
+            "content": "single_frame_b64",
+            "modality": "video",
+            "customer": "test"
+        })
+        response = await handler.handle_moderate_request(request_json)
+
+        assert response["status"] == "error"
+        assert response["status_code"] == 400

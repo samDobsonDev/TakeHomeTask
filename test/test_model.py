@@ -20,18 +20,21 @@ class TestModelPredictionDataclasses:
         field_names = [f.name for f in fields(HateSpeechPrediction)]
         expected = ['input_data', 'toxicity', 'severe_toxicity', 'obscene',
                     'insult', 'identity_attack', 'threat']
+
         assert field_names == expected
 
     def test_sexual_prediction_has_correct_fields(self):
         """Verify SexualPrediction has all required metric fields"""
         field_names = [f.name for f in fields(SexualPrediction)]
         expected = ['input_data', 'sexual_explicit', 'adult_content', 'adult_toys']
+
         assert field_names == expected
 
     def test_violence_prediction_has_correct_fields(self):
         """Verify ViolencePrediction has all required metric fields"""
         field_names = [f.name for f in fields(ViolencePrediction)]
         expected = ['input_data', 'violence', 'firearm', 'knife']
+
         assert field_names == expected
 
     def test_hate_speech_prediction_get_category(self):
@@ -79,7 +82,6 @@ class TestModelPredictionToDict:
             adult_content=0.2,
             adult_toys=0.3
         )
-
         result = prediction.to_dict()
 
         assert 'input_data' not in result
@@ -95,7 +97,6 @@ class TestModelPredictionToDict:
             firearm=0.8,
             knife=0.5
         )
-
         result = prediction.to_dict()
 
         assert 'input_data' not in result
@@ -116,7 +117,7 @@ class TestContentModerationModelValidation:
                 async def predict_image(self, input_data: PreprocessedImage) -> HateSpeechPrediction:
                     pass
 
-                async def predict_video(self, input_data: PreprocessedVideo) -> HateSpeechPrediction:
+                async def predict_video(self, input_data: PreprocessedVideo) -> list[HateSpeechPrediction]:
                     pass
 
 
@@ -128,7 +129,6 @@ class TestMockModelPredictions:
         """Verify HateSpeechModel.predict_text returns valid scores"""
         model = HateSpeechModel()
         preprocessed = PreprocessedText(data=[1] * 16, original_text="test text")
-
         prediction = await model.predict_text(preprocessed)
 
         assert isinstance(prediction, HateSpeechPrediction)
@@ -143,7 +143,6 @@ class TestMockModelPredictions:
         """Verify SexualModel.predict_image returns valid scores"""
         model = SexualModel()
         preprocessed = PreprocessedImage(data=[1] * 16, original_bytes=b"test image")
-
         prediction = await model.predict_image(preprocessed)
 
         assert isinstance(prediction, SexualPrediction)
@@ -154,8 +153,7 @@ class TestMockModelPredictions:
     async def test_violence_model_predict_image_returns_valid_scores(self):
         """Verify ViolenceModel.predict_image returns valid scores"""
         model = ViolenceModel()
-        preprocessed = PreprocessedImage(data=[1] * 16, original_bytes=b"test image")
-
+        preprocessed = PreprocessedImage(data=[1] * 16, original_bytes=b"test image")#
         prediction = await model.predict_image(preprocessed)
 
         assert isinstance(prediction, ViolencePrediction)
@@ -163,33 +161,47 @@ class TestMockModelPredictions:
         assert 0 <= prediction.firearm <= 1
         assert 0 <= prediction.knife <= 1
 
-    async def test_hate_speech_model_predict_video_averages_frame_scores(self):
-        """Verify predict_video averages frame predictions"""
+    async def test_hate_speech_model_predict_video_returns_list_of_predictions(self):
+        """Verify predict_video returns list of frame predictions"""
         model = HateSpeechModel()
         frame1 = PreprocessedImage(data=[1] * 16, original_bytes=b"frame1")
         frame2 = PreprocessedImage(data=[2] * 16, original_bytes=b"frame2")
         video = PreprocessedVideo(frames=[frame1, frame2])
+        predictions = await model.predict_video(video)
 
-        prediction = await model.predict_video(video)
+        assert isinstance(predictions, list)
+        assert len(predictions) == 2
+        for prediction in predictions:
+            assert isinstance(prediction, HateSpeechPrediction)
+            assert 0 <= prediction.toxicity <= 1
+            assert 0 <= prediction.severe_toxicity <= 1
+            assert 0 <= prediction.obscene <= 1
+            assert 0 <= prediction.insult <= 1
+            assert 0 <= prediction.identity_attack <= 1
+            assert 0 <= prediction.threat <= 1
 
-        assert isinstance(prediction, HateSpeechPrediction)
-        assert 0 <= prediction.toxicity <= 1
-        # All metrics should be between the min and max of frame predictions
-        assert prediction.toxicity is not None
-
-    async def test_all_models_predict_video_returns_correct_type(self):
-        """Verify all models return correct type from predict_video"""
-        frame = PreprocessedImage(data=[1] * 16, original_bytes=b"frame")
-        video = PreprocessedVideo(frames=[frame])
-
+    async def test_all_models_predict_video_returns_list_of_correct_type(self):
+        """Verify all models return list of correct prediction type from predict_video"""
+        frame1 = PreprocessedImage(data=[1] * 16, original_bytes=b"frame1")
+        frame2 = PreprocessedImage(data=[2] * 16, original_bytes=b"frame2")
+        video = PreprocessedVideo(frames=[frame1, frame2])
         hate_model = HateSpeechModel()
-        hate_prediction = await hate_model.predict_video(video)
-        assert isinstance(hate_prediction, HateSpeechPrediction)
+        hate_predictions = await hate_model.predict_video(video)
+
+        assert isinstance(hate_predictions, list)
+        assert len(hate_predictions) == 2
+        assert all(isinstance(p, HateSpeechPrediction) for p in hate_predictions)
 
         sexual_model = SexualModel()
-        sexual_prediction = await sexual_model.predict_video(video)
-        assert isinstance(sexual_prediction, SexualPrediction)
+        sexual_predictions = await sexual_model.predict_video(video)
+
+        assert isinstance(sexual_predictions, list)
+        assert len(sexual_predictions) == 2
+        assert all(isinstance(p, SexualPrediction) for p in sexual_predictions)
 
         violence_model = ViolenceModel()
-        violence_prediction = await violence_model.predict_video(video)
-        assert isinstance(violence_prediction, ViolencePrediction)
+        violence_predictions = await violence_model.predict_video(video)
+
+        assert isinstance(violence_predictions, list)
+        assert len(violence_predictions) == 2
+        assert all(isinstance(p, ViolencePrediction) for p in violence_predictions)

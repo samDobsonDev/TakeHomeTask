@@ -39,13 +39,11 @@ class TestPreprocessedDataclasses:
         frame1 = PreprocessedImage(data=[1] * 16, original_bytes=frame1_bytes)
         frame2 = PreprocessedImage(data=[2] * 16, original_bytes=frame2_bytes)
         frames = [frame1, frame2]
-
         video = PreprocessedVideo(frames=frames)
 
         assert video.frames == frames
         assert len(video.frames) == 2
         assert isinstance(video, PreprocessedContent)
-        # Verify original bytes are preserved in frames
         assert video.frames[0].original_bytes == frame1_bytes
         assert video.frames[1].original_bytes == frame2_bytes
 
@@ -64,7 +62,6 @@ class TestTextPreprocessor:
         """Verify TextPreprocessor returns PreprocessedText"""
         preprocessor = TextPreprocessor()
         text = "Hello, this is a test."
-
         result = preprocessor.preprocess(text)
 
         assert isinstance(result, PreprocessedText)
@@ -73,7 +70,6 @@ class TestTextPreprocessor:
         """Verify TextPreprocessor generates numeric data"""
         preprocessor = TextPreprocessor()
         text = "Test text"
-
         result = preprocessor.preprocess(text)
 
         assert isinstance(result.data, list)
@@ -84,7 +80,6 @@ class TestTextPreprocessor:
         """Verify TextPreprocessor generates values in expected range"""
         preprocessor = TextPreprocessor()
         text = "Test"
-
         result = preprocessor.preprocess(text)
 
         assert all(1 <= x <= 100 for x in result.data)
@@ -92,7 +87,6 @@ class TestTextPreprocessor:
     def test_text_preprocessor_with_empty_string(self):
         """Verify TextPreprocessor works with empty string"""
         preprocessor = TextPreprocessor()
-
         result = preprocessor.preprocess("")
 
         assert isinstance(result, PreprocessedText)
@@ -102,7 +96,6 @@ class TestTextPreprocessor:
         """Verify TextPreprocessor works with long text"""
         preprocessor = TextPreprocessor()
         long_text = "a" * 10000
-
         result = preprocessor.preprocess(long_text)
 
         assert isinstance(result, PreprocessedText)
@@ -116,7 +109,6 @@ class TestImagePreprocessor:
         """Verify ImagePreprocessor returns PreprocessedImage"""
         preprocessor = ImagePreprocessor()
         image_bytes = b"fake_image_data"
-
         result = preprocessor.preprocess(image_bytes)
 
         assert isinstance(result, PreprocessedImage)
@@ -125,7 +117,6 @@ class TestImagePreprocessor:
         """Verify ImagePreprocessor generates numeric data"""
         preprocessor = ImagePreprocessor()
         image_bytes = b"image"
-
         result = preprocessor.preprocess(image_bytes)
 
         assert isinstance(result.data, list)
@@ -136,7 +127,6 @@ class TestImagePreprocessor:
         """Verify ImagePreprocessor generates values in expected range"""
         preprocessor = ImagePreprocessor()
         image_bytes = b"test"
-
         result = preprocessor.preprocess(image_bytes)
 
         assert all(1 <= x <= 100 for x in result.data)
@@ -144,7 +134,6 @@ class TestImagePreprocessor:
     def test_image_preprocessor_with_empty_bytes(self):
         """Verify ImagePreprocessor works with empty bytes"""
         preprocessor = ImagePreprocessor()
-
         result = preprocessor.preprocess(b"")
 
         assert isinstance(result, PreprocessedImage)
@@ -154,7 +143,6 @@ class TestImagePreprocessor:
         """Verify ImagePreprocessor works with large image data"""
         preprocessor = ImagePreprocessor()
         large_image = b"x" * 1000000  # 1MB
-
         result = preprocessor.preprocess(large_image)
 
         assert isinstance(result, PreprocessedImage)
@@ -168,7 +156,6 @@ class TestVideoPreprocessor:
         """Verify VideoPreprocessor returns PreprocessedVideo"""
         preprocessor = VideoPreprocessor()
         frames = [b"frame1", b"frame2", b"frame3"]
-
         result = preprocessor.preprocess(frames)
 
         assert isinstance(result, PreprocessedVideo)
@@ -177,7 +164,6 @@ class TestVideoPreprocessor:
         """Verify VideoPreprocessor processes all frames"""
         preprocessor = VideoPreprocessor()
         frames = [b"frame1", b"frame2", b"frame3"]
-
         result = preprocessor.preprocess(frames)
 
         assert len(result.frames) == 3
@@ -187,7 +173,6 @@ class TestVideoPreprocessor:
         """Verify each video frame has numeric data"""
         preprocessor = VideoPreprocessor()
         frames = [b"frame1", b"frame2"]
-
         result = preprocessor.preprocess(frames)
 
         for frame in result.frames:
@@ -199,7 +184,6 @@ class TestVideoPreprocessor:
         """Verify VideoPreprocessor works with single frame"""
         preprocessor = VideoPreprocessor()
         frames = [b"single_frame"]
-
         result = preprocessor.preprocess(frames)
 
         assert len(result.frames) == 1
@@ -209,7 +193,6 @@ class TestVideoPreprocessor:
         """Verify VideoPreprocessor works with many frames"""
         preprocessor = VideoPreprocessor()
         frames = [b"frame" for _ in range(100)]
-
         result = preprocessor.preprocess(frames)
 
         assert len(result.frames) == 100
@@ -218,7 +201,6 @@ class TestVideoPreprocessor:
     def test_video_preprocessor_empty_frames(self):
         """Verify VideoPreprocessor works with empty frames list"""
         preprocessor = VideoPreprocessor()
-
         result = preprocessor.preprocess([])
 
         assert isinstance(result, PreprocessedVideo)
@@ -233,12 +215,10 @@ class TestPreprocessorIntegration:
         text_preprocessor = TextPreprocessor()
         image_preprocessor = ImagePreprocessor()
         video_preprocessor = VideoPreprocessor()
-
         text_result = text_preprocessor.preprocess("test")
         image_result = image_preprocessor.preprocess(b"test")
         video_result = video_preprocessor.preprocess([b"test", b"test"])
 
-        # All should have 16 numeric values per frame
         assert len(text_result.data) == 16
         assert len(image_result.data) == 16
         assert len(video_result.frames[0].data) == 16
@@ -246,10 +226,8 @@ class TestPreprocessorIntegration:
     def test_video_with_image_preprocessor_frames(self):
         """Verify video can be built from image preprocessor frames"""
         image_preprocessor = ImagePreprocessor()
-
         frame1 = image_preprocessor.preprocess(b"frame1")
         frame2 = image_preprocessor.preprocess(b"frame2")
-
         video = PreprocessedVideo(frames=[frame1, frame2])
 
         assert len(video.frames) == 2

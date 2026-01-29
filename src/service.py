@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 import base64
 import re
+from typing import Union
 from src.preprocessor import ContentPreprocessor, PreprocessedContent, PreprocessedText, PreprocessedImage, PreprocessedVideo
 from src.model import ContentModerationModel, ModelPrediction
 from src.risk_classifier import RiskClassifier, PolicyClassification, RiskLevel
@@ -18,11 +19,10 @@ class PredictionType(Enum):
     """Prediction type"""
     POLICY = "policy"
 
-
 @dataclass
 class ModerationRequest:
     """Request to moderate content"""
-    content: str  # base64 encoded for image/video, plain text for text
+    content: str | list[str]
     modality: Modality
     customer: str
     prediction_type: PredictionType = PredictionType.POLICY
@@ -32,15 +32,15 @@ class ModerationRequest:
 class ModerationResult:
     """Result of content moderation"""
     policy_classification: PolicyClassification
-    model_predictions: dict[str, ModelPrediction]
+    model_predictions: dict[str, ModelPrediction | list[ModelPrediction]]
 
 
-def _decode_content(content: str, modality: Modality) -> str | bytes | list[bytes]:
+def _decode_content(content: str | list[str], modality: Modality) -> str | bytes | list[bytes]:
     """
     Decode content from base64 format.
 
     Args:
-        content: Base64 encoded content
+        content: Base64 encoded content (str for text/image, list[str] for video frames)
         modality: Content modality type
 
     Returns:
@@ -60,19 +60,22 @@ def _decode_content(content: str, modality: Modality) -> str | bytes | list[byte
         except Exception as e:
             raise ValueError(f"Failed to decode image from base64: {str(e)}")
     elif modality == Modality.VIDEO:
-        # Decode video frames from base64
-        # Format: comma-separated base64 strings, or single base64 string for mock
+        # Decode video frames from list of base64 strings
         try:
-            # For simplicity, assume single base64 string (will be expanded to frames by preprocessor)
-            video_bytes = base64.b64decode(content)
-            return [video_bytes]
+            if not isinstance(content, list):
+                raise ValueError("Video content must be a list of base64 strings")
+            frames = []
+            for frame_b64 in content:
+                frame_bytes = base64.b64decode(frame_b64)
+                frames.append(frame_bytes)
+            return frames
         except Exception as e:
             raise ValueError(f"Failed to decode video from base64: {str(e)}")
     else:
         raise ValueError(f"Unknown modality: {modality}")
 
 
-async def _predict_by_modality(model: ContentModerationModel, content: PreprocessedContent) -> ModelPrediction:
+async def _predict_by_modality(model: ContentModerationModel, content: PreprocessedContent) -> Union[ModelPrediction, list[ModelPrediction]]:
     """
     Call the appropriate predict method on the model based on content type.
 
@@ -110,29 +113,38 @@ def _get_model_category(prediction_class: type) -> str:
     return re.sub(r'(?<!^)(?=[A-Z])', '_', category).lower()
 
 
-def _classify_policies(model_predictions: dict[str, ModelPrediction]) -> PolicyClassification:
+def _classify_policies(
+        model_predictions: dict[str, Union[ModelPrediction, list[ModelPrediction]]]) -> PolicyClassification:
     """
-    Convert model predictions to policy classification.
+    Classify policies from model predictions.
+
+    For video content, uses the maximum scores across all frames to catch any harmful content.
+    For text/image content, uses the average score.
 
     Args:
-        model_predictions: Dictionary of model predictions
+        model_predictions: Dictionary mapping category to prediction(s)
 
     Returns:
-        PolicyClassification with risk levels for each category
+        PolicyClassification with risk levels per category
+
+    Raises:
+        KeyError: If any expected category is missing from predictions
     """
     classifications = {}
     for category, prediction in model_predictions.items():
-        # Get raw scores from prediction
-        scores: dict[str, float] = prediction.to_dict()
-        # Average scores and classify to risk level
-        avg_score: float = RiskClassifier.average_prediction_scores(scores)
-        risk_level: RiskLevel = RiskClassifier.classify_score(avg_score)
-        classifications[category] = risk_level
-    return PolicyClassification(
-        hate_speech=classifications.get("hate_speech"),
-        sexual=classifications.get("sexual"),
-        violence=classifications.get("violence")
-    )
+        if isinstance(prediction, list):
+            max_scores: dict[str, float] = {}
+            for frame_prediction in prediction:
+                prediction_dict = frame_prediction.to_dict()
+                for key, value in prediction_dict.items():
+                    max_scores[key] = max(max_scores.get(key, 0.0), value)
+            max_score = max(max_scores.values())
+            classifications[category] = RiskClassifier.classify_score(max_score)
+        else:
+            prediction_dict = prediction.to_dict()
+            avg_score = sum(prediction_dict.values()) / len(prediction_dict)
+            classifications[category] = RiskClassifier.classify_score(avg_score)
+    return PolicyClassification(classifications=classifications)
 
 
 class ContentModerationService:
@@ -169,7 +181,6 @@ class ContentModerationService:
             ValueError: If modality is not supported
             base64.binascii.Error: If base64 decoding fails
         """
-        # Validate request
         if request.modality.value not in self.preprocessors:
             raise ValueError(f"Unsupported modality: {request.modality.value}")
         decoded_content = _decode_content(request.content, request.modality)
@@ -181,7 +192,8 @@ class ContentModerationService:
             model_predictions=model_predictions
         )
 
-    async def _run_all_models(self, preprocessed_content: PreprocessedContent) -> dict[str, ModelPrediction]:
+    async def _run_all_models(self, preprocessed_content: PreprocessedContent) -> dict[
+        str, Union[ModelPrediction, list[ModelPrediction]]]:
         """
         Run all models on preprocessed content.
 
@@ -189,13 +201,17 @@ class ContentModerationService:
             preprocessed_content: Preprocessed content from ContentPreprocessor
 
         Returns:
-            Dictionary mapping model category names to their predictions
+            Dictionary mapping model category names to their predictions (single or list for video)
         """
         predictions = {}
         for model in self.models:
-            # Get category name from model's prediction class
-            prediction: ModelPrediction = await _predict_by_modality(model, preprocessed_content)
-            prediction_category = prediction.get_category()
+            prediction: Union[ModelPrediction, list[ModelPrediction]] = await _predict_by_modality(model, preprocessed_content)
+            # Extract category from prediction(s)
+            if isinstance(prediction, list):
+                # For video: get category from first frame prediction
+                prediction_category: str = prediction[0].get_category()
+            else:
+                # For text/image: get category directly
+                prediction_category: str = prediction.get_category()
             predictions[prediction_category] = prediction
         return predictions
-

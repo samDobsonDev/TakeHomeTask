@@ -90,6 +90,7 @@ class TestContentLoaderLoadImage:
         """Verify load_image works with Path object"""
         path_obj = Path(temp_image_file)
         result = ContentLoader.load_image(path_obj)
+
         assert isinstance(result, bytes)
 
     def test_load_image_preserves_binary_data(self):
@@ -158,6 +159,7 @@ class TestContentLoaderLoadVideo:
     def test_load_video_with_string_path(self, temp_video_file):
         """Verify load_video works with string path"""
         result = ContentLoader.load_video(temp_video_file)
+
         assert isinstance(result, list)
         assert len(result) == 10
 
@@ -165,6 +167,7 @@ class TestContentLoaderLoadVideo:
         """Verify load_video works with Path object"""
         path_obj = Path(temp_video_file)
         result = ContentLoader.load_video(path_obj)
+
         assert isinstance(result, list)
         assert len(result) == 10
 
@@ -175,12 +178,14 @@ class TestContentLoadError:
     def test_content_load_error_is_exception(self):
         """Verify ContentLoadError is an Exception"""
         error = ContentLoadError("test error")
+
         assert isinstance(error, Exception)
 
     def test_content_load_error_message(self):
         """Verify ContentLoadError preserves error message"""
         message = "This is a test error"
         error = ContentLoadError(message)
+
         assert str(error) == message
 
 
@@ -193,6 +198,7 @@ class TestContentLoaderErrorMessages:
         with pytest.raises(ContentLoadError) as exc_info:
             ContentLoader.load_image(bad_path)
         error_message = str(exc_info.value).lower()
+
         assert "file.jpg" in error_message
         assert "not found" in error_message
 

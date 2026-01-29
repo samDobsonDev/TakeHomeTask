@@ -1,12 +1,9 @@
-import asyncio
-import base64
 import json
-from pathlib import Path
-import requests
-from src.content_loader import ContentLoader
+from typing import Union
+from src.risk_classifier import RiskClassifier
 from src.service import ContentModerationService, ModerationRequest, Modality, ModerationResult
 from src.preprocessor import TextPreprocessor, ImagePreprocessor, VideoPreprocessor, ContentPreprocessor
-from src.model import HateSpeechModel, SexualModel, ViolenceModel, ContentModerationModel
+from src.model import HateSpeechModel, SexualModel, ViolenceModel, ContentModerationModel, ModelPrediction
 
 
 class ServiceContainer:
@@ -74,45 +71,70 @@ def parse_request(request_data: dict) -> ModerationRequest:
     for field in required_fields:
         if field not in request_data:
             raise KeyError(field)
-
-    # Parse modality
     try:
         modality = Modality(request_data["modality"])
     except ValueError:
         raise ValueError(
             f"Invalid modality: {request_data['modality']}. Must be one of: {', '.join(m.value for m in Modality)}")
-
-    # Validate content is not empty
-    if not request_data["content"]:
-        raise ValueError("Content cannot be empty")
-
+    content: str = request_data["content"]
+    if modality == Modality.VIDEO:
+        if not isinstance(content, list):
+            raise ValueError("Video content must be a list of base64-encoded frames")
+        if len(content) == 0:
+            raise ValueError("Video content cannot be empty")
+        if not all(isinstance(frame, str) for frame in content):
+            raise ValueError("All video frames must be base64-encoded strings")
+    else:
+        if not isinstance(content, str):
+            raise ValueError(f"{modality.value.capitalize()} content must be a base64-encoded string")
+        if not content:
+            raise ValueError("Content cannot be empty")
     return ModerationRequest(
-        content=request_data["content"],
+        content=content,
         modality=modality,
         customer=request_data["customer"]
     )
 
 
-def format_success_response(result: ModerationResult) -> dict:
+def format_success_response(predictions: dict[str, Union[ModelPrediction, list[ModelPrediction]]]) -> dict:
     """
-    Format successful moderation result as response.
+    Format successful moderation response.
+
+    Handles both single predictions (text/image) and list predictions (video frames).
 
     Args:
-        result: ModerationResult from service
+        predictions: Dictionary mapping category to prediction(s)
 
     Returns:
-        Dictionary ready to be JSON serialized
+        Formatted success response dictionary
     """
-    return {
-        "status": "success",
-        "data": {
-            category: {
-                "risk_level": result.policy_classification.__getattribute__(category).value,
-                "scores": prediction.to_dict()
+    response = {"status": "success", "results": {}}
+    for category, prediction in predictions.items():
+        if isinstance(prediction, list):
+            # Video response with per-frame data
+            frame_results = []
+            for frame_idx, frame_prediction in enumerate(prediction):
+                scores = frame_prediction.to_dict()
+                avg_score = sum(scores.values()) / len(scores)
+                risk_level = RiskClassifier.classify_score(avg_score)
+                frame_results.append({
+                    "frame": frame_idx,
+                    "risk_level": risk_level.value,
+                    "scores": scores
+                })
+            response["results"][category] = {
+                "frames": frame_results
             }
-            for category, prediction in result.model_predictions.items()
-        }
-    }
+        else:
+            # Text/image response (single prediction)
+            scores = prediction.to_dict()
+            avg_score = sum(scores.values()) / len(scores)
+            risk_level = RiskClassifier.classify_score(avg_score)
+            response["results"][category] = {
+                "risk_level": risk_level.value,
+                "scores": scores
+            }
+    return response
 
 
 def format_error_response(error_message: str, status_code: int) -> dict:
@@ -166,76 +188,13 @@ class RequestHandler:
             KeyError: If required fields are missing
         """
         try:
-            # Parse request
             request_data = json.loads(request_body)
             moderation_request: ModerationRequest = parse_request(request_data)
-            # Process
             result: ModerationResult = await self.service.moderate(moderation_request)
-            # Format response
-            return format_success_response(result)
-
+            return format_success_response(result.model_predictions)
         except ValueError as e:
             return format_error_response(str(e), 400)
         except KeyError as e:
             return format_error_response(f"Missing required field: {str(e)}", 400)
         except Exception as e:
             return format_error_response(f"Internal error: {str(e)}", 500)
-
-
-async def moderate_image_from_url():
-    """Example 1: Download image from URL and moderate"""
-    print("=" * 60)
-    print("Example 1: Moderate Image from URL")
-    print("=" * 60)
-    image_url = "https://t3.ftcdn.net/jpg/03/21/62/56/360_F_321625657_rauGwvaYjtbETuwxn9kpBWKDYrVUMdB4.jpg"
-    try:
-        response = requests.get(image_url)
-        response.raise_for_status()
-        base64_image = base64.b64encode(response.content).decode('utf-8')
-        handler = RequestHandler()
-        request_json = json.dumps({
-            "content": base64_image,
-            "modality": "image",
-            "customer": "test_customer"
-        })
-        moderation_response = await handler.handle_moderate_request(request_json)
-        print(json.dumps(moderation_response, indent=2))
-    except requests.RequestException as e:
-        print(f"Failed to download image: {e}")
-    except Exception as e:
-        print(f"Error: {e}")
-
-
-async def moderate_image_from_local_file():
-    """Example 2: Load image from local resources and moderate"""
-    print("\n" + "=" * 60)
-    print("Example 2: Moderate Image from Local File")
-    print("=" * 60)
-    try:
-        # Load image using ContentLoader
-        image_path = Path(__file__).parent / "resources" / "gun.png"
-        image_bytes = ContentLoader.load_image(image_path)
-        base64_image = base64.b64encode(image_bytes).decode('utf-8')
-        handler = RequestHandler()
-        request_json = json.dumps({
-            "content": base64_image,
-            "modality": "image",
-            "customer": "test_customer"
-        })
-        moderation_response = await handler.handle_moderate_request(request_json)
-        print(json.dumps(moderation_response, indent=2))
-    except FileNotFoundError as e:
-        print(f"Local image file not found: {e}")
-    except Exception as e:
-        print(f"Error: {e}")
-
-
-async def main():
-    # Example 1: From URL
-    await moderate_image_from_url()
-    # Example 2: From local file
-    await moderate_image_from_local_file()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

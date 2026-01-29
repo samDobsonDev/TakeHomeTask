@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from src.model import ContentModerationModel, ModelPrediction
 from src.preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo, PreprocessedContent
 from src.open_ai.openai_client import OpenAIClient
-from src.aggregator import ScoreAggregator
 
 # Type variables for OpenAI content moderation models
 # PredictionType: The final typed prediction output (e.g., HateSpeechPrediction)
@@ -69,8 +68,8 @@ class OpenAIContentModerationModel(ContentModerationModel[PredictionType], ABC, 
         )
         return self._response_to_prediction(input_data, response)
 
-    async def predict_video(self, input_data: PreprocessedVideo) -> PredictionType:
-        """Analyze video using OpenAI by averaging frame predictions"""
+    async def predict_video(self, input_data: PreprocessedVideo) -> list[PredictionType]:
+        """Analyze video using OpenAI, returning per-frame predictions"""
         frames = [frame.original_bytes for frame in input_data.frames]
         responses = await self.client.analyze_video(
             frames=frames,
@@ -78,14 +77,9 @@ class OpenAIContentModerationModel(ContentModerationModel[PredictionType], ABC, 
             prompt=self.get_image_prompt(),
             response_format=self.get_response_format()
         )
-        # Convert responses to dicts for aggregation
-        response_dicts = []
-        for response in responses:
-            response_dict = {f.name: getattr(response, f.name) for f in type(response).model_fields.values()}
-            response_dicts.append(response_dict)
-        # Aggregate scores across frames
-        aggregated_dict = ScoreAggregator.average_scores(response_dicts)
-        # Convert aggregated dict back to prediction
-        response_format = self.get_response_format()
-        aggregated_response = response_format(**aggregated_dict)
-        return self._response_to_prediction(input_data, aggregated_response)
+        # Convert each response to a prediction
+        predictions = []
+        for i, response in enumerate(responses):
+            prediction = self._response_to_prediction(input_data.frames[i], response)
+            predictions.append(prediction)
+        return predictions

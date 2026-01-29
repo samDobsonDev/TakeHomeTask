@@ -153,17 +153,32 @@ class TestRiskClassificationWorkflow:
         hate_scores = {"toxicity": 0.1, "insult": 0.2}
         sexual_scores = {"sexual_explicit": 0.5}
         violence_scores = {"violence": 0.8, "firearm": 0.9}
-
         hate_avg = RiskClassifier.average_prediction_scores(hate_scores)
         sexual_avg = RiskClassifier.average_prediction_scores(sexual_scores)
         violence_avg = RiskClassifier.average_prediction_scores(violence_scores)
-
         classification = PolicyClassification(
-            hate_speech=RiskClassifier.classify_score(hate_avg),
-            sexual=RiskClassifier.classify_score(sexual_avg),
-            violence=RiskClassifier.classify_score(violence_avg)
+            classifications={
+                "hate_speech": RiskClassifier.classify_score(hate_avg),
+                "sexual": RiskClassifier.classify_score(sexual_avg),
+                "violence": RiskClassifier.classify_score(violence_avg)
+            }
         )
 
-        assert classification.hate_speech == RiskLevel.LOW
-        assert classification.sexual == RiskLevel.MEDIUM
-        assert classification.violence == RiskLevel.HIGH
+        assert classification.classifications["hate_speech"] == RiskLevel.LOW
+        assert classification.classifications["sexual"] == RiskLevel.MEDIUM
+        assert classification.classifications["violence"] == RiskLevel.HIGH
+
+    def test_policy_classification_partial_categories(self):
+        """Verify PolicyClassification works with only some categories"""
+        hate_scores = {"toxicity": 0.1, "insult": 0.2}
+        hate_avg = RiskClassifier.average_prediction_scores(hate_scores)
+        classification = PolicyClassification(
+            classifications={
+                "hate_speech": RiskClassifier.classify_score(hate_avg)
+            }
+        )
+
+        assert "hate_speech" in classification.classifications
+        assert "sexual" not in classification.classifications
+        assert "violence" not in classification.classifications
+        assert classification.classifications["hate_speech"] == RiskLevel.LOW

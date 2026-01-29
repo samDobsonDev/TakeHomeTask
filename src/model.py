@@ -3,7 +3,6 @@ import random
 from dataclasses import dataclass, fields
 from typing import Generic, TypeVar
 from src.preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo, PreprocessedContent
-from src.aggregator import ScoreAggregator
 
 
 @dataclass
@@ -108,25 +107,18 @@ class ContentModerationModel(ABC, Generic[PredictionType]):
     async def predict_image(self, input_data: PreprocessedImage) -> PredictionType:
         pass
 
-    async def predict_video(self, input_data: PreprocessedVideo) -> PredictionType:
+    async def predict_video(self, input_data: PreprocessedVideo) -> list[PredictionType]:
         """
-        Default implementation: process each frame and average scores.
+        Default implementation: process each frame individually.
 
-        Override if custom video handling is needed.
+        Returns a prediction for each frame.
         """
-        frame_predictions = []
+        predictions = []
         for frame in input_data.frames:
             prediction = await self.predict_image(frame)
-            frame_predictions.append(prediction.to_dict())
-        aggregated_scores = ScoreAggregator.average_scores(frame_predictions)
-        # Extract the prediction class from the generic type
-        if hasattr(self.__class__, '__orig_bases__'):
-            for base in self.__class__.__orig_bases__:
-                if hasattr(base, '__args__'):
-                    prediction_class = base.__args__[0]
-                    return prediction_class(input_data=input_data, **aggregated_scores)
-        # Fallback (should not reach here if used correctly)
-        raise TypeError("Could not determine prediction class type")
+            predictions.append(prediction)
+        return predictions
+
 
 def _generate_random_scores(prediction_class: type[ModelPrediction]) -> dict[str, float]:
     """Generate random scores for all metrics in a prediction class"""

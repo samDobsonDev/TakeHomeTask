@@ -47,6 +47,7 @@ class TestModerationRequest:
             modality=Modality.TEXT,
             customer="test_customer"
         )
+
         assert request.content == "test content"
         assert request.modality == Modality.TEXT
         assert request.customer == "test_customer"
@@ -59,6 +60,7 @@ class TestModerationRequest:
             modality=Modality.IMAGE,
             customer="customer"
         )
+
         assert request.prediction_type == PredictionType.POLICY
 
 
@@ -67,15 +69,18 @@ class TestModerationResult:
 
     def test_moderation_result_creation(self):
         classification = PolicyClassification(
-            hate_speech=RiskLevel.LOW,
-            sexual=RiskLevel.MEDIUM,
-            violence=RiskLevel.HIGH
+            classifications={
+                "hate_speech": RiskLevel.LOW,
+                "sexual": RiskLevel.MEDIUM,
+                "violence": RiskLevel.HIGH
+            }
         )
         predictions = {}
         result = ModerationResult(
             policy_classification=classification,
             model_predictions=predictions
         )
+
         assert result.policy_classification == classification
         assert result.model_predictions == predictions
 
@@ -107,9 +112,14 @@ class TestContentModerationService:
             customer="test_customer"
         )
         result = await service.moderate(request)
+
         assert isinstance(result, ModerationResult)
         assert result.policy_classification is not None
         assert len(result.model_predictions) == 3  # 3 models
+        # For text, predictions should be single ModelPrediction objects
+        for category, prediction in result.model_predictions.items():
+            assert not isinstance(prediction, list)
+            assert hasattr(prediction, 'to_dict')
 
     @pytest.mark.asyncio
     async def test_moderate_image_content(self, service):
@@ -122,25 +132,36 @@ class TestContentModerationService:
             customer="test_customer"
         )
         result = await service.moderate(request)
+
         assert isinstance(result, ModerationResult)
         assert result.policy_classification is not None
         assert len(result.model_predictions) == 3
+        # For image, predictions should be single ModelPrediction objects
+        for category, prediction in result.model_predictions.items():
+            assert not isinstance(prediction, list)
+            assert hasattr(prediction, 'to_dict')
 
     @pytest.mark.asyncio
     async def test_moderate_video_content(self, service):
         """Verify moderating video content"""
-        # Video is list of bytes (frames) that gets base64 encoded
-        frame_bytes = b"frame1" + b"frame2"
-        base64_video = base64.b64encode(frame_bytes).decode('utf-8')
+        frame1_b64 = base64.b64encode(b"frame1").decode('utf-8')
+        frame2_b64 = base64.b64encode(b"frame2").decode('utf-8')
         request = ModerationRequest(
-            content=base64_video,
+            content=[frame1_b64, frame2_b64],
             modality=Modality.VIDEO,
             customer="test_customer"
         )
         result = await service.moderate(request)
+
         assert isinstance(result, ModerationResult)
         assert result.policy_classification is not None
         assert len(result.model_predictions) == 3
+        # For video, predictions should be lists of ModelPrediction objects
+        for category, predictions in result.model_predictions.items():
+            assert isinstance(predictions, list)
+            assert len(predictions) > 0
+            for prediction in predictions:
+                assert hasattr(prediction, 'to_dict')
 
     @pytest.mark.asyncio
     async def test_policy_classification_has_all_categories(self, service):
@@ -152,12 +173,13 @@ class TestContentModerationService:
         )
         result = await service.moderate(request)
         classification = result.policy_classification
-        assert hasattr(classification, 'hate_speech')
-        assert hasattr(classification, 'sexual')
-        assert hasattr(classification, 'violence')
-        assert isinstance(classification.hate_speech, RiskLevel)
-        assert isinstance(classification.sexual, RiskLevel)
-        assert isinstance(classification.violence, RiskLevel)
+
+        assert "hate_speech" in classification.classifications
+        assert "sexual" in classification.classifications
+        assert "violence" in classification.classifications
+        assert isinstance(classification.classifications["hate_speech"], RiskLevel)
+        assert isinstance(classification.classifications["sexual"], RiskLevel)
+        assert isinstance(classification.classifications["violence"], RiskLevel)
 
     @pytest.mark.asyncio
     async def test_model_predictions_have_correct_categories(self, service):
@@ -169,6 +191,7 @@ class TestContentModerationService:
         )
         result = await service.moderate(request)
         expected_categories = {"hate_speech", "sexual", "violence"}
+
         assert set(result.model_predictions.keys()) == expected_categories
 
     @pytest.mark.asyncio
@@ -180,6 +203,7 @@ class TestContentModerationService:
             customer="test"
         )
         result = await service.moderate(request)
+
         for category, prediction in result.model_predictions.items():
             scores_dict = prediction.to_dict()
             assert isinstance(scores_dict, dict)
@@ -196,6 +220,7 @@ class TestContentModerationService:
             customer="test_customer"
         )
         result = await service.moderate(request)
+
         assert result is not None
         assert result.policy_classification is not None
 
@@ -214,6 +239,7 @@ class TestContentModerationService:
         )
         result1 = await service.moderate(request1)
         result2 = await service.moderate(request2)
+
         assert result1.policy_classification is not None
         assert result2.policy_classification is not None
 
@@ -238,9 +264,11 @@ class TestContentModerationServiceIntegration:
         )
         result = await service.moderate(request)
         # Verify complete result structure
-        assert result.policy_classification.hate_speech in RiskLevel
-        assert result.policy_classification.sexual in RiskLevel
-        assert result.policy_classification.violence in RiskLevel
+        classifications = result.policy_classification.classifications
+
+        assert classifications["hate_speech"] in RiskLevel
+        assert classifications["sexual"] in RiskLevel
+        assert classifications["violence"] in RiskLevel
         assert len(result.model_predictions) == 3
 
     @pytest.mark.asyncio
@@ -261,6 +289,38 @@ class TestContentModerationServiceIntegration:
         result = await service.moderate(request)
         classification = result.policy_classification
         valid_levels = {RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH}
-        assert classification.hate_speech in valid_levels
-        assert classification.sexual in valid_levels
-        assert classification.violence in valid_levels
+
+        assert classification.classifications["hate_speech"] in valid_levels
+        assert classification.classifications["sexual"] in valid_levels
+        assert classification.classifications["violence"] in valid_levels
+
+    @pytest.mark.asyncio
+    async def test_video_predictions_are_per_frame(self):
+        """Verify video predictions contain per-frame data"""
+        preprocessors = {
+            "text": TextPreprocessor(),
+            "image": ImagePreprocessor(),
+            "video": VideoPreprocessor()
+        }
+        models = [HateSpeechModel(), SexualModel(), ViolenceModel()]
+        service = ContentModerationService(preprocessors, models)
+        # Create a video request with multiple frames
+        # Each frame encoded separately in a list
+        frame1_b64 = base64.b64encode(b"frame1").decode('utf-8')
+        frame2_b64 = base64.b64encode(b"frame2").decode('utf-8')
+        frame3_b64 = base64.b64encode(b"frame3").decode('utf-8')
+        request = ModerationRequest(
+            content=[frame1_b64, frame2_b64, frame3_b64],
+            modality=Modality.VIDEO,
+            customer="video_test"
+        )
+        result = await service.moderate(request)
+
+        # Verify video predictions are lists
+        for category, predictions in result.model_predictions.items():
+            assert isinstance(predictions, list)
+            assert len(predictions) == 3  # Should have 3 frame predictions
+            for prediction in predictions:
+                assert hasattr(prediction, 'to_dict')
+                scores = prediction.to_dict()
+                assert all(0 <= v <= 1 for v in scores.values())
