@@ -18,11 +18,11 @@ class LLMClient(ABC):
 
     @abstractmethod
     async def analyze_text(
-            self,
-            text: str,
-            model: str,
-            prompt: str,
-            response_format: type[BaseModel]
+        self,
+        text: str,
+        model: str,
+        prompt: str,
+        response_format: type[BaseModel]
     ) -> BaseModel:
         """
         Analyze text content.
@@ -40,11 +40,11 @@ class LLMClient(ABC):
 
     @abstractmethod
     async def analyze_image(
-            self,
-            image_bytes: bytes,
-            model: str,
-            prompt: str,
-            response_format: type[BaseModel]
+        self,
+        image_bytes: bytes,
+        model: str,
+        prompt: str,
+        response_format: type[BaseModel]
     ) -> BaseModel:
         """
         Analyze image content.
@@ -62,11 +62,11 @@ class LLMClient(ABC):
 
     @abstractmethod
     async def analyze_video(
-            self,
-            frames: list[bytes],
-            model: str,
-            prompt: str,
-            response_format: type[BaseModel]
+        self,
+        frames: list[bytes],
+        model: str,
+        prompt: str,
+        response_format: type[BaseModel]
     ) -> list[BaseModel]:
         """
         Analyze video content frame by frame.
