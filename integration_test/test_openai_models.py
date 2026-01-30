@@ -186,10 +186,8 @@ class TestFullPipelineWithOpenAIModels:
         }
         models = [OpenAIViolenceModel(api_key=OPENAI_API_KEY)]
         service = ContentModerationService(preprocessors=preprocessors, models=models)
-        image_url = "https://t3.ftcdn.net/jpg/03/21/62/56/360_F_321625657_rauGwvaYjtbETuwxn9kpBWKDYrVUMdB4.jpg"
-        response = requests.get(image_url)
-        response.raise_for_status()
-        base64_image = base64.b64encode(response.content).decode('utf-8')
+        image = fetch_image_from_url("https://t3.ftcdn.net/jpg/03/21/62/56/360_F_321625657_rauGwvaYjtbETuwxn9kpBWKDYrVUMdB4.jpg")
+        base64_image = base64.b64encode(image).decode('utf-8')
         request = ModerationRequest(
             content=base64_image,
             modality=Modality.IMAGE,
