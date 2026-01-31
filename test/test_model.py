@@ -18,7 +18,7 @@ class TestModelPredictionDataclasses:
     def test_hate_speech_prediction_has_correct_fields(self):
         """Verify HateSpeechPrediction has all required metric fields"""
         field_names = [f.name for f in fields(HateSpeechPrediction)]
-        expected = ['input_data', 'toxicity', 'severe_toxicity', 'obscene',
+        expected = ['input_data', 'model_name', 'toxicity', 'severe_toxicity', 'obscene',
                     'insult', 'identity_attack', 'threat']
 
         assert field_names == expected
@@ -26,14 +26,14 @@ class TestModelPredictionDataclasses:
     def test_sexual_prediction_has_correct_fields(self):
         """Verify SexualPrediction has all required metric fields"""
         field_names = [f.name for f in fields(SexualPrediction)]
-        expected = ['input_data', 'sexual_explicit', 'adult_content', 'adult_toys']
+        expected = ['input_data', 'model_name', 'sexual_explicit', 'adult_content', 'adult_toys']
 
         assert field_names == expected
 
     def test_violence_prediction_has_correct_fields(self):
         """Verify ViolencePrediction has all required metric fields"""
         field_names = [f.name for f in fields(ViolencePrediction)]
-        expected = ['input_data', 'violence', 'firearm', 'knife']
+        expected = ['input_data', 'model_name', 'violence', 'firearm', 'knife']
 
         assert field_names == expected
 
@@ -54,10 +54,11 @@ class TestModelPredictionToDict:
     """Test to_dict() method for predictions"""
 
     def test_hate_speech_prediction_to_dict(self):
-        """Verify HateSpeechPrediction.to_dict() excludes input_data"""
+        """Verify HateSpeechPrediction.to_dict() excludes input_data and model_name"""
         preprocessed = PreprocessedText(data=[1, 2, 3], original_text="test text")
         prediction = HateSpeechPrediction(
             input_data=preprocessed,
+            model_name="TestModel",
             toxicity=0.5,
             severe_toxicity=0.3,
             obscene=0.4,
@@ -69,15 +70,17 @@ class TestModelPredictionToDict:
         result = prediction.to_dict()
 
         assert 'input_data' not in result
+        assert 'model_name' not in result
         assert result['toxicity'] == 0.5
         assert result['severe_toxicity'] == 0.3
-        assert len(result) == 6  # 6 metrics, no input_data
+        assert len(result) == 6
 
     def test_sexual_prediction_to_dict(self):
-        """Verify SexualPrediction.to_dict() excludes input_data"""
+        """Verify SexualPrediction.to_dict() excludes input_data and model_name"""
         preprocessed = PreprocessedText(data=[1, 2, 3], original_text="test text")
         prediction = SexualPrediction(
             input_data=preprocessed,
+            model_name="TestModel",
             sexual_explicit=0.1,
             adult_content=0.2,
             adult_toys=0.3
@@ -85,14 +88,16 @@ class TestModelPredictionToDict:
         result = prediction.to_dict()
 
         assert 'input_data' not in result
+        assert 'model_name' not in result
         assert result['sexual_explicit'] == 0.1
         assert len(result) == 3
 
     def test_violence_prediction_to_dict(self):
-        """Verify ViolencePrediction.to_dict() excludes input_data"""
+        """Verify ViolencePrediction.to_dict() excludes input_data and model_name"""
         preprocessed = PreprocessedText(data=[1, 2, 3], original_text="test text")
         prediction = ViolencePrediction(
             input_data=preprocessed,
+            model_name="TestModel",
             violence=0.7,
             firearm=0.8,
             knife=0.5
@@ -100,6 +105,7 @@ class TestModelPredictionToDict:
         result = prediction.to_dict()
 
         assert 'input_data' not in result
+        assert 'model_name' not in result
         assert result['violence'] == 0.7
         assert len(result) == 3
 
@@ -111,6 +117,8 @@ class TestContentModerationModelValidation:
         """Verify that declaring wrong prediction type raises TypeError"""
         with pytest.raises(TypeError, match="declares.*but predict_text returns"):
             class BadModel(ContentModerationModel[HateSpeechPrediction]):  # noqa: F841
+                name = "BadModel"
+
                 async def predict_text(self, input_data: PreprocessedText) -> SexualPrediction:
                     pass
 
@@ -119,7 +127,6 @@ class TestContentModerationModelValidation:
 
                 async def predict_video(self, input_data: PreprocessedVideo) -> list[HateSpeechPrediction]:
                     pass
-
 
 @pytest.mark.asyncio
 class TestMockModelPredictions:

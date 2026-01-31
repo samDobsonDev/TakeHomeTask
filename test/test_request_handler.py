@@ -176,6 +176,7 @@ class TestFormatSuccessResponse:
         """Verify success response has correct structure for single prediction"""
         mock_prediction = MagicMock()
         mock_prediction.to_dict.return_value = {"metric1": 0.5}
+        mock_prediction.model_name = "TestModel"
         predictions = {
             "hate_speech": mock_prediction,
             "sexual": mock_prediction,
@@ -191,6 +192,7 @@ class TestFormatSuccessResponse:
         """Verify success response includes risk levels"""
         mock_prediction = MagicMock()
         mock_prediction.to_dict.return_value = {"metric": 0.5}
+        mock_prediction.model_name = "TestModel"
         predictions = {
             "hate_speech": mock_prediction,
             "sexual": mock_prediction,
@@ -206,6 +208,7 @@ class TestFormatSuccessResponse:
         """Verify success response includes detailed scores"""
         mock_prediction = MagicMock()
         mock_prediction.to_dict.return_value = {"metric1": 0.5, "metric2": 0.3}
+        mock_prediction.model_name = "TestModel"
         predictions = {
             "hate_speech": mock_prediction,
             "sexual": mock_prediction,
@@ -216,12 +219,26 @@ class TestFormatSuccessResponse:
         assert response["results"]["hate_speech"]["scores"]["metric1"] == 0.5
         assert response["results"]["hate_speech"]["scores"]["metric2"] == 0.3
 
+    def test_format_success_response_includes_model_name(self):
+        """Verify success response includes model_name"""
+        mock_prediction = MagicMock()
+        mock_prediction.to_dict.return_value = {"metric": 0.5}
+        mock_prediction.model_name = "HateSpeechModel"
+        predictions = {
+            "hate_speech": mock_prediction
+        }
+        response = format_success_response(predictions)
+
+        assert response["results"]["hate_speech"]["model_name"] == "HateSpeechModel"
+
     def test_format_success_response_video_predictions(self):
         """Verify success response for video predictions with frames"""
         mock_prediction1 = MagicMock()
         mock_prediction1.to_dict.return_value = {"metric": 0.3}
+        mock_prediction1.model_name = "TestModel"
         mock_prediction2 = MagicMock()
         mock_prediction2.to_dict.return_value = {"metric": 0.7}
+        mock_prediction2.model_name = "TestModel"
         predictions = {
             "hate_speech": [mock_prediction1, mock_prediction2]
         }
@@ -232,6 +249,25 @@ class TestFormatSuccessResponse:
         assert len(response["results"]["hate_speech"]["frames"]) == 2
         assert response["results"]["hate_speech"]["frames"][0]["frame"] == 0
         assert response["results"]["hate_speech"]["frames"][1]["frame"] == 1
+
+    def test_format_success_response_video_includes_model_name(self):
+        """Verify success response for video predictions includes model_name"""
+        mock_prediction1 = MagicMock()
+        mock_prediction1.to_dict.return_value = {"metric": 0.3}
+        mock_prediction1.model_name = "ViolenceModel"
+        mock_prediction2 = MagicMock()
+        mock_prediction2.to_dict.return_value = {"metric": 0.7}
+        mock_prediction2.model_name = "ViolenceModel"
+        predictions = {
+            "violence": [mock_prediction1, mock_prediction2]
+        }
+        response = format_success_response(predictions)
+
+        # Model name at category level
+        assert response["results"]["violence"]["model_name"] == "ViolenceModel"
+        # Model name at frame level
+        assert response["results"]["violence"]["frames"][0]["model_name"] == "ViolenceModel"
+        assert response["results"]["violence"]["frames"][1]["model_name"] == "ViolenceModel"
 
 
 class TestFormatErrorResponse:

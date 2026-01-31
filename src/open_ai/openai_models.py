@@ -30,6 +30,7 @@ class ViolenceScores(BaseModel):
 
 class OpenAIHateSpeechModel(OpenAIContentModerationModel[HateSpeechPrediction, HateSpeechScores]):
     """OpenAI-powered hate speech detection model"""
+    name = "OpenAIHateSpeechModel"
 
     def get_model_name(self) -> str:
         return "gpt-4o-2024-08-06"
@@ -57,11 +58,12 @@ class OpenAIHateSpeechModel(OpenAIContentModerationModel[HateSpeechPrediction, H
                                 response: HateSpeechScores) -> HateSpeechPrediction:
         """Convert response to prediction"""
         scores = {field_name: getattr(response, field_name) for field_name in response.model_fields.keys()}
-        return HateSpeechPrediction(input_data=input_data, **scores)
+        return HateSpeechPrediction(input_data=input_data, model_name=self.name, **scores)
 
 
 class OpenAISexualModel(OpenAIContentModerationModel[SexualPrediction, SexualScores]):
     """OpenAI-powered sexual content detection model"""
+    name = "OpenAISexualModel"
 
     def get_model_name(self) -> str:
         return "gpt-4o-2024-08-06"
@@ -89,11 +91,12 @@ class OpenAISexualModel(OpenAIContentModerationModel[SexualPrediction, SexualSco
                                 response: SexualScores) -> SexualPrediction:
         """Convert response to prediction"""
         scores = {field_name: getattr(response, field_name) for field_name in response.model_fields.keys()}
-        return SexualPrediction(input_data=input_data, **scores)
+        return SexualPrediction(input_data=input_data, model_name=self.name, **scores)
 
 
 class OpenAIViolenceModel(OpenAIContentModerationModel[ViolencePrediction, ViolenceScores]):
     """OpenAI-powered violence detection model"""
+    name = "OpenAIViolenceModel"
 
     def get_model_name(self) -> str:
         return "gpt-4o-2024-08-06"
@@ -121,4 +124,4 @@ class OpenAIViolenceModel(OpenAIContentModerationModel[ViolencePrediction, Viole
                                 response: ViolenceScores) -> ViolencePrediction:
         """Convert response to prediction"""
         scores = {field_name: getattr(response, field_name) for field_name in response.model_fields.keys()}
-        return ViolencePrediction(input_data=input_data, **scores)
+        return ViolencePrediction(input_data=input_data, model_name=self.name, **scores)

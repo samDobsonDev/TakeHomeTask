@@ -119,10 +119,12 @@ def format_success_response(predictions: dict[str, Union[ModelPrediction, list[M
                 risk_level = RiskClassifier.classify_score(avg_score)
                 frame_results.append({
                     "frame": frame_idx,
+                    "model_name": frame_prediction.model_name,
                     "risk_level": risk_level.value,
                     "scores": scores
                 })
             response["results"][category] = {
+                "model_name": prediction[0].model_name,
                 "frames": frame_results
             }
         else:
@@ -131,6 +133,7 @@ def format_success_response(predictions: dict[str, Union[ModelPrediction, list[M
             avg_score = sum(scores.values()) / len(scores)
             risk_level = RiskClassifier.classify_score(avg_score)
             response["results"][category] = {
+                "model_name": prediction.model_name,
                 "risk_level": risk_level.value,
                 "scores": scores
             }

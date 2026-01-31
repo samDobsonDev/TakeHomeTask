@@ -9,6 +9,7 @@ from src.preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVi
 class ModelPrediction(ABC):
     """Base class for model predictions"""
     input_data: PreprocessedContent
+    model_name: str  # Name of the model that made this prediction
 
     @classmethod
     @abstractmethod
@@ -18,7 +19,7 @@ class ModelPrediction(ABC):
 
     def to_dict(self) -> dict[str, float]:
         """Convert prediction to dictionary format"""
-        return {f.name: getattr(self, f.name) for f in fields(self) if f.name != 'input_data'}
+        return {f.name: getattr(self, f.name) for f in fields(self) if f.name not in ('input_data', 'model_name')}
 
 PredictionType = TypeVar('PredictionType', bound=ModelPrediction)
 
@@ -68,6 +69,12 @@ class ContentModerationModel(ABC, Generic[PredictionType]):
     Each model evaluates content across different modalities (text, image, video)
     and returns raw metric scores.
     """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Name of the model - must be defined by subclasses"""
+        ...
 
     def __init_subclass__(cls, **kwargs):
         """Validate that the declared PredictionType matches method return types"""
@@ -122,41 +129,44 @@ class ContentModerationModel(ABC, Generic[PredictionType]):
 
 def _generate_random_scores(prediction_class: type[ModelPrediction]) -> dict[str, float]:
     """Generate random scores for all metrics in a prediction class"""
-    metrics = [f.name for f in fields(prediction_class) if f.name != 'input_data']
+    metrics = [f.name for f in fields(prediction_class) if f.name not in ('input_data', 'model_name')]
     return {metric: random.random() for metric in metrics}
 
 
 class HateSpeechModel(ContentModerationModel[HateSpeechPrediction]):
     """Model for detecting hate speech and toxic content"""
+    name = "HateSpeechModel"
 
     async def predict_text(self, input_data: PreprocessedText) -> HateSpeechPrediction:
         scores = _generate_random_scores(HateSpeechPrediction)
-        return HateSpeechPrediction(input_data=input_data, **scores)
+        return HateSpeechPrediction(input_data=input_data, model_name=self.name, **scores)
 
     async def predict_image(self, input_data: PreprocessedImage) -> HateSpeechPrediction:
         scores = _generate_random_scores(HateSpeechPrediction)
-        return HateSpeechPrediction(input_data=input_data, **scores)
+        return HateSpeechPrediction(input_data=input_data, model_name=self.name, **scores)
 
 
 class SexualModel(ContentModerationModel[SexualPrediction]):
     """Model for detecting sexual content"""
+    name = "SexualModel"
 
     async def predict_text(self, input_data: PreprocessedText) -> SexualPrediction:
         scores = _generate_random_scores(SexualPrediction)
-        return SexualPrediction(input_data=input_data, **scores)
+        return SexualPrediction(input_data=input_data, model_name=self.name, **scores)
 
     async def predict_image(self, input_data: PreprocessedImage) -> SexualPrediction:
         scores = _generate_random_scores(SexualPrediction)
-        return SexualPrediction(input_data=input_data, **scores)
+        return SexualPrediction(input_data=input_data, model_name=self.name, **scores)
 
 
 class ViolenceModel(ContentModerationModel[ViolencePrediction]):
     """Model for detecting violent content"""
+    name = "ViolenceModel"
 
     async def predict_text(self, input_data: PreprocessedText) -> ViolencePrediction:
         scores = _generate_random_scores(ViolencePrediction)
-        return ViolencePrediction(input_data=input_data, **scores)
+        return ViolencePrediction(input_data=input_data, model_name=self.name, **scores)
 
     async def predict_image(self, input_data: PreprocessedImage) -> ViolencePrediction:
         scores = _generate_random_scores(ViolencePrediction)
-        return ViolencePrediction(input_data=input_data, **scores)
+        return ViolencePrediction(input_data=input_data, model_name=self.name, **scores)
