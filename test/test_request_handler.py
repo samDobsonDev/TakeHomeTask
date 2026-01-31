@@ -251,7 +251,7 @@ class TestFormatSuccessResponse:
         assert response["results"]["hate_speech"]["frames"][1]["frame"] == 1
 
     def test_format_success_response_video_includes_model_name(self):
-        """Verify success response for video predictions includes model_name"""
+        """Verify success response for video predictions includes model_name at category level"""
         mock_prediction1 = MagicMock()
         mock_prediction1.to_dict.return_value = {"metric": 0.3}
         mock_prediction1.model_name = "ViolenceModel"
@@ -265,9 +265,33 @@ class TestFormatSuccessResponse:
 
         # Model name at category level
         assert response["results"]["violence"]["model_name"] == "ViolenceModel"
-        # Model name at frame level
-        assert response["results"]["violence"]["frames"][0]["model_name"] == "ViolenceModel"
-        assert response["results"]["violence"]["frames"][1]["model_name"] == "ViolenceModel"
+        # Should have frames (single model video frames)
+        assert "frames" in response["results"]["violence"]
+        assert len(response["results"]["violence"]["frames"]) == 2
+        assert "model_name" not in response["results"]["violence"]["frames"][0]
+        assert "model_name" not in response["results"]["violence"]["frames"][1]
+
+    def test_format_success_response_multiple_models_same_category(self):
+        """Verify success response for multiple models predicting same category"""
+        mock_prediction1 = MagicMock()
+        mock_prediction1.to_dict.return_value = {"metric": 0.3}
+        mock_prediction1.model_name = "RandomViolenceModel"
+        mock_prediction2 = MagicMock()
+        mock_prediction2.to_dict.return_value = {"metric": 0.7}
+        mock_prediction2.model_name = "OpenAIViolenceModel"
+        predictions = {
+            "violence": [mock_prediction1, mock_prediction2]
+        }
+        response = format_success_response(predictions)
+
+        # Should have models array (multiple models)
+        assert "models" in response["results"]["violence"]
+        assert len(response["results"]["violence"]["models"]) == 2
+        assert response["results"]["violence"]["models"][0]["model_name"] == "RandomViolenceModel"
+        assert response["results"]["violence"]["models"][1]["model_name"] == "OpenAIViolenceModel"
+        # Should NOT have frames or single model_name
+        assert "frames" not in response["results"]["violence"]
+        assert "model_name" not in response["results"]["violence"]
 
 
 class TestFormatErrorResponse:

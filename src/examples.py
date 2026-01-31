@@ -2,9 +2,16 @@ import asyncio
 import json
 import base64
 import requests
+import os
 from pathlib import Path
-from src.request_handler import RequestHandler
+from dotenv import load_dotenv
+from src.request_handler import RequestHandler, ServiceContainer
 from src.content_loader import ContentLoader
+from src.model import RandomViolenceModel
+from src.open_ai.openai_models import OpenAIViolenceModel
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 async def moderate_text():
@@ -99,6 +106,38 @@ async def moderate_video():
         print(f"Error: {e}")
 
 
+async def moderate_violence_with_dual_models():
+    """Example 5: Moderate violence content with custom container using two violence models"""
+    print("\n" + "=" * 60)
+    print("Example 5: Violence Detection with Dual Models (Random + OpenAI)")
+    print("=" * 60)
+    try:
+        # Get API key from environment
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            print("Error: OPENAI_API_KEY environment variable not set. Please set it in your .env file.")
+            return
+        
+        # Create custom ServiceContainer with two violence models
+        container = ServiceContainer(
+            models=[
+                RandomViolenceModel(),
+                OpenAIViolenceModel(api_key=api_key),
+            ]
+        )
+        handler = RequestHandler(container=container)
+        text_content = "This is violent content for testing."
+        request_json = json.dumps({
+            "content": text_content,
+            "modality": "text",
+            "customer": "test_customer"
+        })
+        moderation_response = await handler.handle_moderate_request(request_json)
+        print(json.dumps(moderation_response, indent=2))
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 async def main():
     """Run all moderation examples"""
     print("\n" + "=" * 60)
@@ -112,6 +151,8 @@ async def main():
     await moderate_image_from_local_file()
     # Example 4: Video moderation
     await moderate_video()
+    # Example 5: Violence detection with dual models
+    await moderate_violence_with_dual_models()
     print("\n" + "=" * 60)
     print("All examples completed!")
     print("=" * 60)

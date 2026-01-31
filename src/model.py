@@ -133,9 +133,9 @@ def _generate_random_scores(prediction_class: type[ModelPrediction]) -> dict[str
     return {metric: random.random() for metric in metrics}
 
 
-class HateSpeechModel(ContentModerationModel[HateSpeechPrediction]):
+class RandomHateSpeechModel(ContentModerationModel[HateSpeechPrediction]):
     """Model for detecting hate speech and toxic content"""
-    name = "HateSpeechModel"
+    name = "RandomHateSpeechModel"
 
     async def predict_text(self, input_data: PreprocessedText) -> HateSpeechPrediction:
         scores = _generate_random_scores(HateSpeechPrediction)
@@ -146,9 +146,9 @@ class HateSpeechModel(ContentModerationModel[HateSpeechPrediction]):
         return HateSpeechPrediction(input_data=input_data, model_name=self.name, **scores)
 
 
-class SexualModel(ContentModerationModel[SexualPrediction]):
+class RandomSexualModel(ContentModerationModel[SexualPrediction]):
     """Model for detecting sexual content"""
-    name = "SexualModel"
+    name = "RandomSexualModel"
 
     async def predict_text(self, input_data: PreprocessedText) -> SexualPrediction:
         scores = _generate_random_scores(SexualPrediction)
@@ -159,9 +159,9 @@ class SexualModel(ContentModerationModel[SexualPrediction]):
         return SexualPrediction(input_data=input_data, model_name=self.name, **scores)
 
 
-class ViolenceModel(ContentModerationModel[ViolencePrediction]):
+class RandomViolenceModel(ContentModerationModel[ViolencePrediction]):
     """Model for detecting violent content"""
-    name = "ViolenceModel"
+    name = "RandomViolenceModel"
 
     async def predict_text(self, input_data: PreprocessedText) -> ViolencePrediction:
         scores = _generate_random_scores(ViolencePrediction)

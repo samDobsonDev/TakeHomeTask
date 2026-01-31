@@ -5,9 +5,9 @@ from src.model import (
     SexualPrediction,
     ViolencePrediction,
     ContentModerationModel,
-    HateSpeechModel,
-    SexualModel,
-    ViolenceModel,
+    RandomHateSpeechModel,
+    RandomSexualModel,
+    RandomViolenceModel,
 )
 from src.preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo
 
@@ -134,7 +134,7 @@ class TestMockModelPredictions:
 
     async def test_hate_speech_model_predict_text_returns_valid_scores(self):
         """Verify HateSpeechModel.predict_text returns valid scores"""
-        model = HateSpeechModel()
+        model = RandomHateSpeechModel()
         preprocessed = PreprocessedText(data=[1] * 16, original_text="test text")
         prediction = await model.predict_text(preprocessed)
 
@@ -148,7 +148,7 @@ class TestMockModelPredictions:
 
     async def test_sexual_model_predict_image_returns_valid_scores(self):
         """Verify SexualModel.predict_image returns valid scores"""
-        model = SexualModel()
+        model = RandomSexualModel()
         preprocessed = PreprocessedImage(data=[1] * 16, original_bytes=b"test image")
         prediction = await model.predict_image(preprocessed)
 
@@ -159,7 +159,7 @@ class TestMockModelPredictions:
 
     async def test_violence_model_predict_image_returns_valid_scores(self):
         """Verify ViolenceModel.predict_image returns valid scores"""
-        model = ViolenceModel()
+        model = RandomViolenceModel()
         preprocessed = PreprocessedImage(data=[1] * 16, original_bytes=b"test image")#
         prediction = await model.predict_image(preprocessed)
 
@@ -170,7 +170,7 @@ class TestMockModelPredictions:
 
     async def test_hate_speech_model_predict_video_returns_list_of_predictions(self):
         """Verify predict_video returns list of frame predictions"""
-        model = HateSpeechModel()
+        model = RandomHateSpeechModel()
         frame1 = PreprocessedImage(data=[1] * 16, original_bytes=b"frame1")
         frame2 = PreprocessedImage(data=[2] * 16, original_bytes=b"frame2")
         video = PreprocessedVideo(frames=[frame1, frame2])
@@ -192,21 +192,21 @@ class TestMockModelPredictions:
         frame1 = PreprocessedImage(data=[1] * 16, original_bytes=b"frame1")
         frame2 = PreprocessedImage(data=[2] * 16, original_bytes=b"frame2")
         video = PreprocessedVideo(frames=[frame1, frame2])
-        hate_model = HateSpeechModel()
+        hate_model = RandomHateSpeechModel()
         hate_predictions = await hate_model.predict_video(video)
 
         assert isinstance(hate_predictions, list)
         assert len(hate_predictions) == 2
         assert all(isinstance(p, HateSpeechPrediction) for p in hate_predictions)
 
-        sexual_model = SexualModel()
+        sexual_model = RandomSexualModel()
         sexual_predictions = await sexual_model.predict_video(video)
 
         assert isinstance(sexual_predictions, list)
         assert len(sexual_predictions) == 2
         assert all(isinstance(p, SexualPrediction) for p in sexual_predictions)
 
-        violence_model = ViolenceModel()
+        violence_model = RandomViolenceModel()
         violence_predictions = await violence_model.predict_video(video)
 
         assert isinstance(violence_predictions, list)

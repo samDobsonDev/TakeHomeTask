@@ -3,7 +3,7 @@ from typing import Union
 from src.risk_classifier import RiskClassifier
 from src.service import ContentModerationService, ModerationRequest, Modality, ModerationResult
 from src.preprocessor import TextPreprocessor, ImagePreprocessor, VideoPreprocessor, ContentPreprocessor
-from src.model import HateSpeechModel, SexualModel, ViolenceModel, ContentModerationModel, ModelPrediction
+from src.model import RandomHateSpeechModel, RandomSexualModel, RandomViolenceModel, ContentModerationModel, ModelPrediction
 
 
 class ServiceContainer:
@@ -13,10 +13,16 @@ class ServiceContainer:
     Manages instantiation and lifecycle of preprocessors, models, and the service.
     """
 
-    def __init__(self):
-        """Initialize the container and all dependencies"""
-        self._preprocessors = None
-        self._models = None
+    def __init__(self, preprocessors: dict[str, ContentPreprocessor] = None, models: list[ContentModerationModel] = None):
+        """
+        Initialize the container and all dependencies.
+        
+        Args:
+            preprocessors: Optional dictionary of preprocessors. If None, defaults are created.
+            models: Optional list of models. If None, defaults are created.
+        """
+        self._preprocessors = preprocessors
+        self._models = models
         self._service = None
 
     @property
@@ -35,9 +41,9 @@ class ServiceContainer:
         """Lazy-load models"""
         if self._models is None:
             self._models = [
-                HateSpeechModel(),
-                SexualModel(),
-                ViolenceModel(),
+                RandomHateSpeechModel(),
+                RandomSexualModel(),
+                RandomViolenceModel(),
             ]
         return self._models
 
@@ -100,7 +106,8 @@ def format_success_response(predictions: dict[str, Union[ModelPrediction, list[M
     """
     Format successful moderation response.
 
-    Handles both single predictions (text/image) and list predictions (video frames).
+    Handles single predictions (text/image), video frames (list of predictions from one model),
+    and multiple models predicting the same category.
 
     Args:
         predictions: Dictionary mapping category to prediction(s)
@@ -111,24 +118,42 @@ def format_success_response(predictions: dict[str, Union[ModelPrediction, list[M
     response = {"status": "success", "results": {}}
     for category, prediction in predictions.items():
         if isinstance(prediction, list):
-            # Video response with per-frame data
-            frame_results = []
-            for frame_idx, frame_prediction in enumerate(prediction):
-                scores = frame_prediction.to_dict()
-                avg_score = sum(scores.values()) / len(scores)
-                risk_level = RiskClassifier.classify_score(avg_score)
-                frame_results.append({
-                    "frame": frame_idx,
-                    "model_name": frame_prediction.model_name,
-                    "risk_level": risk_level.value,
-                    "scores": scores
-                })
-            response["results"][category] = {
-                "model_name": prediction[0].model_name,
-                "frames": frame_results
-            }
+            # Check if this is a video response (all predictions have same model_name)
+            # or multiple models (different model_names)
+            model_names = set(p.model_name for p in prediction)
+            if len(model_names) == 1:
+                # Single model with video frames
+                frame_results = []
+                for frame_idx, frame_prediction in enumerate(prediction):
+                    scores = frame_prediction.to_dict()
+                    avg_score = sum(scores.values()) / len(scores)
+                    risk_level = RiskClassifier.classify_score(avg_score)
+                    frame_results.append({
+                        "frame": frame_idx,
+                        "risk_level": risk_level.value,
+                        "scores": scores
+                    })
+                response["results"][category] = {
+                    "model_name": prediction[0].model_name,
+                    "frames": frame_results
+                }
+            else:
+                # Multiple models for the same category
+                models_results = []
+                for model_prediction in prediction:
+                    scores = model_prediction.to_dict()
+                    avg_score = sum(scores.values()) / len(scores)
+                    risk_level = RiskClassifier.classify_score(avg_score)
+                    models_results.append({
+                        "model_name": model_prediction.model_name,
+                        "risk_level": risk_level.value,
+                        "scores": scores
+                    })
+                response["results"][category] = {
+                    "models": models_results
+                }
         else:
-            # Text/image response (single prediction)
+            # Text/image response (single prediction from single model)
             scores = prediction.to_dict()
             avg_score = sum(scores.values()) / len(scores)
             risk_level = RiskClassifier.classify_score(avg_score)

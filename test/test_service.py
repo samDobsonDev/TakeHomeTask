@@ -9,7 +9,7 @@ from src.service import (
 )
 from src.preprocessor import TextPreprocessor, ImagePreprocessor, \
     VideoPreprocessor
-from src.model import HateSpeechModel, SexualModel, ViolenceModel
+from src.model import RandomHateSpeechModel, RandomSexualModel, RandomViolenceModel
 from src.risk_classifier import RiskLevel, PolicyClassification
 
 
@@ -97,9 +97,9 @@ class TestContentModerationService:
             "video": VideoPreprocessor()
         }
         models = [
-            HateSpeechModel(),
-            SexualModel(),
-            ViolenceModel()
+            RandomHateSpeechModel(),
+            RandomSexualModel(),
+            RandomViolenceModel()
         ]
         return ContentModerationService(preprocessors=preprocessors, models=models)
 
@@ -255,7 +255,7 @@ class TestContentModerationServiceIntegration:
             "image": ImagePreprocessor(),
             "video": VideoPreprocessor()
         }
-        models = [HateSpeechModel(), SexualModel(), ViolenceModel()]
+        models = [RandomHateSpeechModel(), RandomSexualModel(), RandomViolenceModel()]
         service = ContentModerationService(preprocessors, models)
         request = ModerationRequest(
             content="Test content for moderation",
@@ -279,7 +279,7 @@ class TestContentModerationServiceIntegration:
             "image": ImagePreprocessor(),
             "video": VideoPreprocessor()
         }
-        models = [HateSpeechModel(), SexualModel(), ViolenceModel()]
+        models = [RandomHateSpeechModel(), RandomSexualModel(), RandomViolenceModel()]
         service = ContentModerationService(preprocessors, models)
         request = ModerationRequest(
             content="test",
@@ -302,7 +302,7 @@ class TestContentModerationServiceIntegration:
             "image": ImagePreprocessor(),
             "video": VideoPreprocessor()
         }
-        models = [HateSpeechModel(), SexualModel(), ViolenceModel()]
+        models = [RandomHateSpeechModel(), RandomSexualModel(), RandomViolenceModel()]
         service = ContentModerationService(preprocessors, models)
         # Create a video request with multiple frames
         # Each frame encoded separately in a list

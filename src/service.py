@@ -118,8 +118,8 @@ def _classify_policies(
     """
     Classify policies from model predictions.
 
-    For video content, uses the maximum scores across all frames to catch any harmful content.
-    For text/image content, uses the average score.
+    For video content from a single model, uses the maximum scores across all frames to catch any harmful content.
+    For text/image content or multiple models, uses the maximum average score across all models.
 
     Args:
         model_predictions: Dictionary mapping category to prediction(s)
@@ -133,14 +133,27 @@ def _classify_policies(
     classifications = {}
     for category, prediction in model_predictions.items():
         if isinstance(prediction, list):
-            max_scores: dict[str, float] = {}
-            for frame_prediction in prediction:
-                prediction_dict = frame_prediction.to_dict()
-                for key, value in prediction_dict.items():
-                    max_scores[key] = max(max_scores.get(key, 0.0), value)
-            max_score = max(max_scores.values())
-            classifications[category] = RiskClassifier.classify_score(max_score)
+            # Check if this is video frames (same model_name) or multiple models (different model_names)
+            model_names = set(p.model_name for p in prediction)
+            if len(model_names) == 1:
+                # Single model with video frames - use max score across frames
+                max_scores: dict[str, float] = {}
+                for frame_prediction in prediction:
+                    prediction_dict = frame_prediction.to_dict()
+                    for key, value in prediction_dict.items():
+                        max_scores[key] = max(max_scores.get(key, 0.0), value)
+                max_score = max(max_scores.values())
+                classifications[category] = RiskClassifier.classify_score(max_score)
+            else:
+                # Multiple models for same category - use max average score across models
+                max_avg_score = 0.0
+                for model_prediction in prediction:
+                    prediction_dict = model_prediction.to_dict()
+                    avg_score = sum(prediction_dict.values()) / len(prediction_dict)
+                    max_avg_score = max(max_avg_score, avg_score)
+                classifications[category] = RiskClassifier.classify_score(max_avg_score)
         else:
+            # Single model, single prediction
             prediction_dict = prediction.to_dict()
             avg_score = sum(prediction_dict.values()) / len(prediction_dict)
             classifications[category] = RiskClassifier.classify_score(avg_score)
@@ -213,5 +226,14 @@ class ContentModerationService:
             else:
                 # For text/image: get category directly
                 prediction_category: str = prediction.get_category()
-            predictions[prediction_category] = prediction
+            
+            # If category already exists, convert to list of predictions
+            if prediction_category in predictions:
+                existing = predictions[prediction_category]
+                if isinstance(existing, list):
+                    existing.append(prediction)
+                else:
+                    predictions[prediction_category] = [existing, prediction]
+            else:
+                predictions[prediction_category] = prediction
         return predictions
