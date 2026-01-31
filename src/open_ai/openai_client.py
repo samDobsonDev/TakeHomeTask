@@ -1,14 +1,7 @@
 import base64
-from enum import Enum
 from openai import OpenAI
 from pydantic import BaseModel
 from src.llm_client import LLMClient
-
-
-class RequestModality(Enum):
-    """Modality types for request building"""
-    TEXT = "text"
-    IMAGE = "image"
 
 
 class OpenAIClient(LLMClient):
@@ -23,42 +16,51 @@ class OpenAIClient(LLMClient):
         self.client = OpenAI(api_key=api_key)
 
     @staticmethod
-    def build_request(prompt: str, modality: RequestModality, content: str | bytes) -> dict:
+    def _build_text_request(prompt: str, text: str) -> dict:
         """
-        Build request payload for OpenAI API.
+        Build request payload for text content.
 
         Args:
             prompt: The analysis prompt
-            modality: The content modality (TEXT or IMAGE)
-            content: The content to analyze (str for text, bytes for image)
+            text: The text content to analyze
 
         Returns:
             Formatted request dictionary
 
         Raises:
-            ValueError: If content is None
+            ValueError: If text is None
         """
-        if content is None:
+        if text is None:
             raise ValueError("Content cannot be None")
-        request_content = [
-            {
-                "type": "input_text",
-                "text": prompt,
-            }
-        ]
-        if modality == RequestModality.TEXT:
-            # For text, append content to the prompt
-            request_content[0]["text"] = f"{prompt}\n\nContent: {content}"
-        elif modality == RequestModality.IMAGE:
-            # For image, add as separate content block
-            base64_image = base64.b64encode(content).decode('utf-8')
-            request_content.append({
-                "type": "input_image",
-                "image_url": f"data:image/jpeg;base64,{base64_image}",
-            })
         return {
             "role": "user",
-            "content": request_content,
+            "content": [{"type": "input_text", "text": f"{prompt}\n\nContent: {text}"}],
+        }
+
+    @staticmethod
+    def _build_image_request(prompt: str, image_bytes: bytes) -> dict:
+        """
+        Build request payload for image content.
+
+        Args:
+            prompt: The analysis prompt
+            image_bytes: The image bytes to analyze
+
+        Returns:
+            Formatted request dictionary
+
+        Raises:
+            ValueError: If image_bytes is None
+        """
+        if image_bytes is None:
+            raise ValueError("Content cannot be None")
+        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        return {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": prompt},
+                {"type": "input_image", "image_url": f"data:image/jpeg;base64,{base64_image}"},
+            ],
         }
 
     async def analyze_text(
@@ -80,7 +82,7 @@ class OpenAIClient(LLMClient):
         Returns:
             Parsed response as specified by response_format
         """
-        request = self.build_request(prompt, RequestModality.TEXT, text)
+        request = self._build_text_request(prompt, text)
         response = self.client.responses.parse(
             model=model,
             input=[request],
@@ -107,7 +109,7 @@ class OpenAIClient(LLMClient):
         Returns:
             Parsed response as specified by response_format
         """
-        request = self.build_request(prompt, RequestModality.IMAGE, image_bytes)
+        request = self._build_image_request(prompt, image_bytes)
         response = self.client.responses.parse(
             model=model,
             input=[request],
@@ -136,7 +138,7 @@ class OpenAIClient(LLMClient):
         """
         results = []
         for frame_bytes in frames:
-            request = self.build_request(prompt, RequestModality.IMAGE, frame_bytes)
+            request = self._build_image_request(prompt, frame_bytes)
             response = self.client.responses.parse(
                 model=model,
                 input=[request],

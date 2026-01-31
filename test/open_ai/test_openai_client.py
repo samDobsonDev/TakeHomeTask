@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pydantic import BaseModel
-from src.open_ai.openai_client import OpenAIClient, RequestModality
+from src.open_ai.openai_client import OpenAIClient
 
 
 # Test Pydantic models for response format
@@ -11,14 +11,14 @@ class SampleResponse(BaseModel):
     label: str
 
 
-class TestOpenAIClientBuildRequest:
-    """Test build_request static method"""
+class TestOpenAIClientBuildTextRequest:
+    """Test _build_text_request static method"""
 
     def test_build_text_request(self):
         """Test building a text request"""
         prompt = "Analyze this text:"
         content = "Hello world"
-        request = OpenAIClient.build_request(prompt, RequestModality.TEXT, content)
+        request = OpenAIClient._build_text_request(prompt, content)
 
         assert request["role"] == "user"
         assert len(request["content"]) == 1
@@ -30,16 +30,43 @@ class TestOpenAIClientBuildRequest:
         """Test that text request properly formats prompt and content"""
         prompt = "Check for toxicity:"
         content = "malicious text"
-        request = OpenAIClient.build_request(prompt, RequestModality.TEXT, content)
+        request = OpenAIClient._build_text_request(prompt, content)
         text_content = request["content"][0]["text"]
 
         assert text_content == f"{prompt}\n\nContent: {content}"
+
+    def test_build_text_request_only_has_one_content_block(self):
+        """Test that text requests only have one content block"""
+        request = OpenAIClient._build_text_request("Prompt", "content")
+
+        assert len(request["content"]) == 1
+
+    def test_build_text_request_with_complex_prompt(self):
+        """Test building request with multiline prompt"""
+        prompt = """Analyze this content.
+        Return scores between 0.0 and 1.0
+        Metrics: score1, score2"""
+        content = "test content"
+        request = OpenAIClient._build_text_request(prompt, content)
+        text_content = request["content"][0]["text"]
+
+        assert prompt in text_content
+        assert content in text_content
+
+    def test_build_text_request_with_none_content_raises_error(self):
+        """Test that building text request with None content raises ValueError"""
+        with pytest.raises(ValueError, match="Content cannot be None"):
+            OpenAIClient._build_text_request("Prompt", None)  # type: ignore
+
+
+class TestOpenAIClientBuildImageRequest:
+    """Test _build_image_request static method"""
 
     def test_build_image_request(self):
         """Test building an image request"""
         prompt = "Analyze this image:"
         image_bytes = b"fake_image_data"
-        request = OpenAIClient.build_request(prompt, RequestModality.IMAGE, image_bytes)
+        request = OpenAIClient._build_image_request(prompt, image_bytes)
 
         assert request["role"] == "user"
         assert len(request["content"]) == 2
@@ -54,41 +81,23 @@ class TestOpenAIClientBuildRequest:
         """Test that image bytes are properly base64 encoded"""
         prompt = "Check image:"
         image_bytes = b"test_image"
-        request = OpenAIClient.build_request(prompt, RequestModality.IMAGE, image_bytes)
+        request = OpenAIClient._build_image_request(prompt, image_bytes)
         image_url = request["content"][1]["image_url"]
 
         # "test_image" in base64 is "dGVzdF9pbWFnZQ=="
         assert "dGVzdF9pbWFnZQ==" in image_url
 
-    def test_build_request_text_modality_only_has_one_content_block(self):
-        """Test that text requests only have one content block"""
-        request = OpenAIClient.build_request("Prompt", RequestModality.TEXT, "content")
-
-        assert len(request["content"]) == 1
-
-    def test_build_request_image_modality_has_two_content_blocks(self):
+    def test_build_image_request_has_two_content_blocks(self):
         """Test that image requests have text and image content blocks"""
-        request = OpenAIClient.build_request("Prompt", RequestModality.IMAGE, b"data")
+        request = OpenAIClient._build_image_request("Prompt", b"data")
 
         assert len(request["content"]) == 2
         assert request["content"][0]["type"] == "input_text"
         assert request["content"][1]["type"] == "input_image"
 
-    def test_build_request_with_complex_prompt(self):
-        """Test building request with multiline prompt"""
-        prompt = """Analyze this content.
-        Return scores between 0.0 and 1.0
-        Metrics: score1, score2"""
-        content = "test content"
-        request = OpenAIClient.build_request(prompt, RequestModality.TEXT, content)
-        text_content = request["content"][0]["text"]
-
-        assert prompt in text_content
-        assert content in text_content
-
-    def test_build_request_with_empty_image_bytes(self):
+    def test_build_image_request_with_empty_bytes(self):
         """Test building request with empty image bytes"""
-        request = OpenAIClient.build_request("Prompt", RequestModality.IMAGE, b"")
+        request = OpenAIClient._build_image_request("Prompt", b"")
 
         # Should still have valid structure even with empty bytes
         assert len(request["content"]) == 2
@@ -96,10 +105,10 @@ class TestOpenAIClientBuildRequest:
         # Empty bytes base64 encodes to empty string
         assert request["content"][1]["image_url"] == "data:image/jpeg;base64,"
 
-    def test_build_request_with_none_content_raises_error(self):
-        """Test that building request with None content raises ValueError"""
+    def test_build_image_request_with_none_content_raises_error(self):
+        """Test that building image request with None content raises ValueError"""
         with pytest.raises(ValueError, match="Content cannot be None"):
-            OpenAIClient.build_request("Prompt", RequestModality.IMAGE, None)  # type: ignore
+            OpenAIClient._build_image_request("Prompt", None)  # type: ignore
 
 
 class TestOpenAIClientInitialization:
