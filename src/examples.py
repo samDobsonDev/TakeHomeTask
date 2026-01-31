@@ -4,14 +4,56 @@ import base64
 import requests
 import os
 from pathlib import Path
+from typing import Union
 from dotenv import load_dotenv
-from src.request_handler import RequestHandler, ServiceContainer
+from src.request_handler import RequestHandler, ServiceContainer, ModerationResponse, ErrorResponse
 from src.content_loader import ContentLoader
-from src.model import RandomViolenceModel
-from src.open_ai.openai_models import OpenAIViolenceModel
+from src.model import RandomViolenceModel, RandomHateSpeechModel
+from src.open_ai.openai_models import OpenAIViolenceModel, OpenAIHateSpeechModel
+
 
 # Load environment variables from .env file
 load_dotenv()
+
+
+def print_moderation_response(response: Union[ModerationResponse, ErrorResponse]) -> None:
+    """Pretty print a moderation response with all available fields"""
+    print("\n" + "-" * 60)
+    print(f"Status: {response.status}")
+    if response.status == "error":
+        # Error response
+        print(f"Error: {response.error}")
+        print(f"Status Code: {response.status_code}")
+    else:
+        # Moderation response
+        print(f"\nResults ({len(response.results)} categories):")
+        for category, result in response.results.items():
+            print(f"\n  {category.upper()}:")
+            print(f"    Risk Level: {result.risk_level}")
+            if result.single_model:
+                print(f"    Model: {result.single_model.model_name}")
+                # Only show scores if there are no frames (text/image)
+                if result.single_model.frames:
+                    print(f"    Video Frames: {len(result.single_model.frames)}")
+                    for frame in result.single_model.frames:
+                        print(f"      Frame {frame.frame}: risk={frame.risk_level}, scores={frame.scores}")
+                else:
+                    # Only show scores if they exist (text/image)
+                    if result.single_model.scores:
+                        print(f"    Scores: {result.single_model.scores}")
+            if result.models:
+                print(f"    Multiple Models: {len(result.models)}")
+                for model in result.models:
+                    print(f"      - {model.model_name}: risk={model.risk_level}")
+                    # Show frames if they exist (video), otherwise show scores (text/image)
+                    if model.frames:
+                        print(f"        Frames: {len(model.frames)}")
+                        for frame in model.frames:
+                            print(f"          Frame {frame.frame}: risk={frame.risk_level}, scores={frame.scores}")
+                    elif model.scores:
+                        print(f"        Scores: {model.scores}")
+    
+    print("-" * 60 + "\n")
 
 
 async def moderate_text():
@@ -28,7 +70,7 @@ async def moderate_text():
             "customer": "test_customer"
         })
         moderation_response = await handler.handle_moderate_request(request_json)
-        print(json.dumps(moderation_response, indent=2))
+        print_moderation_response(moderation_response)
     except Exception as e:
         print(f"Error: {e}")
 
@@ -50,7 +92,7 @@ async def moderate_image_from_url():
             "customer": "test_customer"
         })
         moderation_response = await handler.handle_moderate_request(request_json)
-        print(json.dumps(moderation_response, indent=2))
+        print_moderation_response(moderation_response)
     except requests.RequestException as e:
         print(f"Failed to download image: {e}")
     except Exception as e:
@@ -73,7 +115,7 @@ async def moderate_image_from_local_file():
             "customer": "test_customer"
         })
         moderation_response = await handler.handle_moderate_request(request_json)
-        print(json.dumps(moderation_response, indent=2))
+        print_moderation_response(moderation_response)
     except FileNotFoundError as e:
         print(f"Local image file not found: {e}")
     except Exception as e:
@@ -88,7 +130,6 @@ async def moderate_video():
     try:
         image_path = Path(__file__).parent.parent / "resources" / "gun.png"
         image_bytes = ContentLoader.load_image(image_path)
-        # Create 3 frames (same image repeated for demo)
         frame1_b64 = base64.b64encode(image_bytes).decode('utf-8')
         frame2_b64 = base64.b64encode(image_bytes).decode('utf-8')
         frame3_b64 = base64.b64encode(image_bytes).decode('utf-8')
@@ -99,26 +140,57 @@ async def moderate_video():
             "customer": "test_customer"
         })
         moderation_response = await handler.handle_moderate_request(request_json)
-        print(json.dumps(moderation_response, indent=2))
+        print_moderation_response(moderation_response)
     except FileNotFoundError as e:
         print(f"Local video file not found: {e}")
     except Exception as e:
         print(f"Error: {e}")
 
 
-async def moderate_violence_with_dual_models():
-    """Example 5: Moderate violence content with custom container using two violence models"""
+async def moderate_violence_with_dual_hate_speech_models():
+    """Example 5: Moderate hate speech content with custom container using two hate speech models"""
     print("\n" + "=" * 60)
-    print("Example 5: Violence Detection with Dual Models (Random + OpenAI)")
+    print("Example 5: Text with Dual Hate Speech Models (Random + OpenAI)")
     print("=" * 60)
     try:
-        # Get API key from environment
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             print("Error: OPENAI_API_KEY environment variable not set. Please set it in your .env file.")
             return
-        
-        # Create custom ServiceContainer with two violence models
+        container = ServiceContainer(
+            models=[
+                RandomHateSpeechModel(),
+                OpenAIHateSpeechModel(api_key=api_key),
+            ]
+        )
+        handler = RequestHandler(container=container)
+        text_content = "Fuck you I hate you all!"
+        request_json = json.dumps({
+            "content": text_content,
+            "modality": "text",
+            "customer": "test_customer"
+        })
+        moderation_response = await handler.handle_moderate_request(request_json)
+        print_moderation_response(moderation_response)
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+async def moderate_video_with_dual_violence_models():
+    """Example 6: Moderate video with dual violence models (Random + OpenAI)"""
+    print("\n" + "=" * 60)
+    print("Example 6: Video with Dual Violence Models (Random + OpenAI)")
+    print("=" * 60)
+    try:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            print("Error: OPENAI_API_KEY environment variable not set. Please set it in your .env file.")
+            return
+        image_path = Path(__file__).parent.parent / "resources" / "gun.png"
+        image_bytes = ContentLoader.load_image(image_path)
+        frame1_b64 = base64.b64encode(image_bytes).decode('utf-8')
+        frame2_b64 = base64.b64encode(image_bytes).decode('utf-8')
+        frame3_b64 = base64.b64encode(image_bytes).decode('utf-8')
         container = ServiceContainer(
             models=[
                 RandomViolenceModel(),
@@ -126,14 +198,15 @@ async def moderate_violence_with_dual_models():
             ]
         )
         handler = RequestHandler(container=container)
-        text_content = "This is violent content for testing."
         request_json = json.dumps({
-            "content": text_content,
-            "modality": "text",
+            "content": [frame1_b64, frame2_b64, frame3_b64],
+            "modality": "video",
             "customer": "test_customer"
         })
         moderation_response = await handler.handle_moderate_request(request_json)
-        print(json.dumps(moderation_response, indent=2))
+        print_moderation_response(moderation_response)
+    except FileNotFoundError as e:
+        print(f"Local image file not found: {e}")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -151,8 +224,10 @@ async def main():
     await moderate_image_from_local_file()
     # Example 4: Video moderation
     await moderate_video()
-    # Example 5: Violence detection with dual models
-    await moderate_violence_with_dual_models()
+    # Example 5: Text hate speech detection with dual models
+    await moderate_violence_with_dual_hate_speech_models()
+    # Example 6: Video violence detection with dual models
+    await moderate_video_with_dual_violence_models()
     print("\n" + "=" * 60)
     print("All examples completed!")
     print("=" * 60)

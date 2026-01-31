@@ -1,9 +1,50 @@
 import json
-from typing import Union
-from src.risk_classifier import RiskClassifier
+from dataclasses import dataclass, field
+from typing import Union, Optional
+from src.risk_classifier import RiskClassifier, RiskLevel
+from src.score_calculator import ScoreCalculator
 from src.service import ContentModerationService, ModerationRequest, Modality, ModerationResult
 from src.preprocessor import TextPreprocessor, ImagePreprocessor, VideoPreprocessor, ContentPreprocessor
 from src.model import RandomHateSpeechModel, RandomSexualModel, RandomViolenceModel, ContentModerationModel, ModelPrediction
+
+@dataclass
+class FrameResult:
+    """Result for a single video frame"""
+    frame: int
+    risk_level: RiskLevel
+    scores: dict[str, float]
+
+
+@dataclass
+class SingleModelResult:
+    """Result for a single model prediction (text/image or video)"""
+    model_name: str
+    risk_level: RiskLevel
+    scores: dict[str, float] = field(default_factory=dict)  # Empty for video (scores only in frames)
+    frames: list[FrameResult] = field(default_factory=list)
+
+
+@dataclass
+class CategoryResult:
+    """Result for a content category"""
+    risk_level: RiskLevel  # Always present - computed from scores
+    single_model: Optional[SingleModelResult] = None  # Present for single model (text/image/video)
+    models: list[SingleModelResult] = field(default_factory=list)  # Present for multiple models
+
+
+@dataclass
+class ModerationResponse:
+    """Successful moderation response"""
+    status: str = "success"
+    results: dict[str, CategoryResult] = field(default_factory=dict)
+
+
+@dataclass
+class ErrorResponse:
+    """Error response"""
+    status: str = "error"
+    error: Optional[str] = None
+    status_code: Optional[int] = None
 
 
 class ServiceContainer:
@@ -74,9 +115,9 @@ def parse_request(request_data: dict) -> ModerationRequest:
     """
     # Validate required fields
     required_fields = ["content", "modality", "customer"]
-    for field in required_fields:
-        if field not in request_data:
-            raise KeyError(field)
+    for field_name in required_fields:
+        if field_name not in request_data:
+            raise KeyError(field_name)
     try:
         modality = Modality(request_data["modality"])
     except ValueError:
@@ -102,70 +143,79 @@ def parse_request(request_data: dict) -> ModerationRequest:
     )
 
 
-def format_success_response(predictions: dict[str, Union[ModelPrediction, list[ModelPrediction]]]) -> dict:
+def format_success_response(moderation_result: ModerationResult) -> ModerationResponse:
     """
     Format successful moderation response.
 
-    Handles single predictions (text/image), video frames (list of predictions from one model),
-    and multiple models predicting the same category.
-
-    Args:
-        predictions: Dictionary mapping category to prediction(s)
-
-    Returns:
-        Formatted success response dictionary
+    Input: ModerationResult with policy classifications and raw model predictions
+    
+    Output: ModerationResponse with organized results, reusing computed risk levels
     """
-    response = {"status": "success", "results": {}}
-    for category, prediction in predictions.items():
-        if isinstance(prediction, list):
-            # Check if this is a video response (all predictions have same model_name)
-            # or multiple models (different model_names)
-            model_names = set(p.model_name for p in prediction)
-            if len(model_names) == 1:
-                # Single model with video frames
-                frame_results = []
-                for frame_idx, frame_prediction in enumerate(prediction):
-                    scores = frame_prediction.to_dict()
-                    avg_score = sum(scores.values()) / len(scores)
-                    risk_level = RiskClassifier.classify_score(avg_score)
-                    frame_results.append({
-                        "frame": frame_idx,
-                        "risk_level": risk_level.value,
-                        "scores": scores
-                    })
-                response["results"][category] = {
-                    "model_name": prediction[0].model_name,
-                    "frames": frame_results
-                }
-            else:
-                # Multiple models for the same category
-                models_results = []
-                for model_prediction in prediction:
-                    scores = model_prediction.to_dict()
-                    avg_score = sum(scores.values()) / len(scores)
-                    risk_level = RiskClassifier.classify_score(avg_score)
-                    models_results.append({
-                        "model_name": model_prediction.model_name,
-                        "risk_level": risk_level.value,
-                        "scores": scores
-                    })
-                response["results"][category] = {
-                    "models": models_results
-                }
+    response = ModerationResponse()
+    policy_classifications: dict[str, RiskLevel] = moderation_result.policy_classification.classifications
+    for category, model_predictions in moderation_result.model_predictions.items():
+        # Use the pre-computed risk level from policy classification
+        category_risk_level: RiskLevel = policy_classifications.get(category, RiskLevel.LOW)
+        if len(model_predictions) == 1:
+            # Single model - build simple response
+            prediction = model_predictions[0]
+            model_result: SingleModelResult = _build_single_model_result(prediction)
+            response.results[category] = CategoryResult(
+                risk_level=category_risk_level,
+                single_model=model_result
+            )
         else:
-            # Text/image response (single prediction from single model)
-            scores = prediction.to_dict()
-            avg_score = sum(scores.values()) / len(scores)
-            risk_level = RiskClassifier.classify_score(avg_score)
-            response["results"][category] = {
-                "model_name": prediction.model_name,
-                "risk_level": risk_level.value,
-                "scores": scores
-            }
+            # Multiple models - build aggregated response
+            models_results: list[SingleModelResult] = [_build_single_model_result(model_prediction) for model_prediction in model_predictions]
+            response.results[category] = CategoryResult(
+                risk_level=category_risk_level,
+                models=models_results
+            )
     return response
 
 
-def format_error_response(error_message: str, status_code: int) -> dict:
+def _build_single_model_result(prediction: Union[ModelPrediction, list[ModelPrediction]]) -> SingleModelResult:
+    """
+    Build a SingleModelResult from either a single prediction or list of frames.
+    
+    Args:
+        prediction: Either a ModelPrediction (text/image) or list[ModelPrediction] (video)
+    
+    Returns:
+        SingleModelResult with populated fields
+    """
+    if isinstance(prediction, list):
+        # Video: list of frames
+        frame_results = [
+            FrameResult(
+                frame=idx,
+                risk_level=RiskClassifier.classify_score(ScoreCalculator.compute_average_score(frame)),
+                scores=frame.to_dict()
+            )
+            for idx, frame in enumerate(prediction)
+        ]
+        # Compute this model's risk level from its own frames
+        model_avg_score = ScoreCalculator.compute_average_score(prediction)
+        model_risk_level = RiskClassifier.classify_score(model_avg_score)
+        return SingleModelResult(
+            model_name=prediction[0].model_name,
+            risk_level=model_risk_level,
+            scores={},
+            frames=frame_results
+        )
+    else:
+        # Text/image: single prediction
+        model_avg_score = ScoreCalculator.compute_average_score(prediction)
+        model_risk_level = RiskClassifier.classify_score(model_avg_score)
+        return SingleModelResult(
+            model_name=prediction.model_name,
+            risk_level=model_risk_level,
+            scores=prediction.to_dict(),
+            frames=[]
+        )
+
+
+def format_error_response(error_message: str, status_code: int) -> ErrorResponse:
     """
     Format error response.
 
@@ -174,13 +224,12 @@ def format_error_response(error_message: str, status_code: int) -> dict:
         status_code: HTTP status code
 
     Returns:
-        Dictionary ready to be JSON serialized
+        ErrorResponse object ready to be JSON serialized
     """
-    return {
-        "status": "error",
-        "error": error_message,
-        "status_code": status_code
-    }
+    return ErrorResponse(
+        error=error_message,
+        status_code=status_code
+    )
 
 
 class RequestHandler:
@@ -201,7 +250,7 @@ class RequestHandler:
         self.container = container or ServiceContainer()
         self.service = self.container.service
 
-    async def handle_moderate_request(self, request_body: str) -> dict:
+    async def handle_moderate_request(self, request_body: str) -> Union[ModerationResponse, ErrorResponse]:
         """
         Handle a content moderation request.
 
@@ -209,7 +258,7 @@ class RequestHandler:
             request_body: JSON string containing the request
 
         Returns:
-            Dictionary with moderation result or error
+            ModerationResponse or ErrorResponse object
 
         Raises:
             ValueError: If request format is invalid
@@ -219,7 +268,7 @@ class RequestHandler:
             request_data = json.loads(request_body)
             moderation_request: ModerationRequest = parse_request(request_data)
             result: ModerationResult = await self.service.moderate(moderation_request)
-            return format_success_response(result.model_predictions)
+            return format_success_response(result)
         except ValueError as e:
             return format_error_response(str(e), 400)
         except KeyError as e:

@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from enum import Enum
 import base64
-import re
 from typing import Union
 from src.preprocessor import ContentPreprocessor, PreprocessedContent, PreprocessedText, PreprocessedImage, PreprocessedVideo
 from src.model import ContentModerationModel, ModelPrediction
 from src.risk_classifier import RiskClassifier, PolicyClassification, RiskLevel
+from src.score_calculator import ScoreCalculator
 
 
 class Modality(Enum):
@@ -30,7 +30,30 @@ class ModerationRequest:
 
 @dataclass
 class ModerationResult:
-    """Result of content moderation"""
+    """
+    Result of content moderation containing both policy classification and raw predictions.
+    
+    Attributes:
+        policy_classification: Final risk levels per category (high/medium/low).
+                              Aggregates across all models by taking the maximum risk.
+        model_predictions: Raw predictions from all models, organized by category.
+                          Each category maps to either:
+                          - A single ModelPrediction (text/image)
+                          - A list of ModelPredictions (video frames)
+                          This preserves individual model predictions for detailed analysis.
+    
+    Example:
+        ModerationResult(
+            policy_classification=PolicyClassification({
+                "violence": RiskLevel.HIGH,
+                "hate_speech": RiskLevel.LOW
+            }),
+            model_predictions={
+                "violence": [frame1, frame2, frame3],  # Video frames
+                "hate_speech": prediction_obj  # Single prediction
+            }
+        )
+    """
     policy_classification: PolicyClassification
     model_predictions: dict[str, ModelPrediction | list[ModelPrediction]]
 
@@ -96,67 +119,38 @@ async def _predict_by_modality(model: ContentModerationModel, content: Preproces
         raise ValueError(f"Unknown content type: {type(content)}")
 
 
-def _get_model_category(prediction_class: type) -> str:
+def _get_prediction_category(prediction: Union[ModelPrediction, list[ModelPrediction]]) -> str:
     """
-    Extract model category name from prediction class name.
-
+    Extract the category from a prediction (single or list of frames).
+    
     Args:
-        prediction_class: The ModelPrediction subclass
-
+        prediction: Either a single ModelPrediction or a list of ModelPredictions (video frames)
+    
     Returns:
-        Category name (e.g., "hate_speech" from "HateSpeechPrediction")
+        Category name from the prediction
     """
-    class_name = prediction_class.__name__
-    # Remove "Prediction" suffix and convert to snake_case
-    category = class_name.replace("Prediction", "")
-    # Convert CamelCase to snake_case
-    return re.sub(r'(?<!^)(?=[A-Z])', '_', category).lower()
+    if isinstance(prediction, list):
+        return prediction[0].get_category()
+    return prediction.get_category()
 
 
-def _classify_policies(
-        model_predictions: dict[str, Union[ModelPrediction, list[ModelPrediction]]]) -> PolicyClassification:
+def _classify_policies(model_predictions: dict[str, list[Union[ModelPrediction, list[ModelPrediction]]]]) -> PolicyClassification:
     """
     Classify policies from model predictions.
 
-    For video content from a single model, uses the maximum scores across all frames to catch any harmful content.
-    For text/image content or multiple models, uses the maximum average score across all models.
-
     Args:
-        model_predictions: Dictionary mapping category to prediction(s)
-
-    Returns:
-        PolicyClassification with risk levels per category
-
-    Raises:
-        KeyError: If any expected category is missing from predictions
+        model_predictions: Maps each category to a list of predictions from all models.
+                          Each prediction can be a single ModelPrediction or a list of ModelPredictions (video).
+    
+    Uses maximum score across all frames and models to be on the safe side.
     """
     classifications = {}
-    for category, prediction in model_predictions.items():
-        if isinstance(prediction, list):
-            # Check if this is video frames (same model_name) or multiple models (different model_names)
-            model_names = set(p.model_name for p in prediction)
-            if len(model_names) == 1:
-                # Single model with video frames - use max score across frames
-                max_scores: dict[str, float] = {}
-                for frame_prediction in prediction:
-                    prediction_dict = frame_prediction.to_dict()
-                    for key, value in prediction_dict.items():
-                        max_scores[key] = max(max_scores.get(key, 0.0), value)
-                max_score = max(max_scores.values())
-                classifications[category] = RiskClassifier.classify_score(max_score)
-            else:
-                # Multiple models for same category - use max average score across models
-                max_avg_score = 0.0
-                for model_prediction in prediction:
-                    prediction_dict = model_prediction.to_dict()
-                    avg_score = sum(prediction_dict.values()) / len(prediction_dict)
-                    max_avg_score = max(max_avg_score, avg_score)
-                classifications[category] = RiskClassifier.classify_score(max_avg_score)
-        else:
-            # Single model, single prediction
-            prediction_dict = prediction.to_dict()
-            avg_score = sum(prediction_dict.values()) / len(prediction_dict)
-            classifications[category] = RiskClassifier.classify_score(avg_score)
+    for category, predictions_list in model_predictions.items():
+        max_avg_score = max(
+            (ScoreCalculator.compute_average_score(prediction) for prediction in predictions_list),
+            default=0.0
+        )
+        classifications[category] = RiskClassifier.classify_score(max_avg_score)
     return PolicyClassification(classifications=classifications)
 
 
@@ -206,34 +200,22 @@ class ContentModerationService:
         )
 
     async def _run_all_models(self, preprocessed_content: PreprocessedContent) -> dict[
-        str, Union[ModelPrediction, list[ModelPrediction]]]:
+        str, list[Union[ModelPrediction, list[ModelPrediction]]]]:
         """
         Run all models on preprocessed content.
 
-        Args:
-            preprocessed_content: Preprocessed content from ContentPreprocessor
+        Returns a dict mapping category to a list of predictions from all models.
+        Each prediction can be:
+        - A single ModelPrediction (for text/image)
+        - A list of ModelPredictions (for video)
 
-        Returns:
-            Dictionary mapping model category names to their predictions (single or list for video)
+        This creates a normalized structure: always a list per category, containing 
+        predictions from each model that predicted that category.
         """
-        predictions = {}
+        predictions_by_category = {}
         for model in self.models:
-            prediction: Union[ModelPrediction, list[ModelPrediction]] = await _predict_by_modality(model, preprocessed_content)
-            # Extract category from prediction(s)
-            if isinstance(prediction, list):
-                # For video: get category from first frame prediction
-                prediction_category: str = prediction[0].get_category()
-            else:
-                # For text/image: get category directly
-                prediction_category: str = prediction.get_category()
-            
-            # If category already exists, convert to list of predictions
-            if prediction_category in predictions:
-                existing = predictions[prediction_category]
-                if isinstance(existing, list):
-                    existing.append(prediction)
-                else:
-                    predictions[prediction_category] = [existing, prediction]
-            else:
-                predictions[prediction_category] = prediction
-        return predictions
+            prediction: ModelPrediction | list[ModelPrediction] = await _predict_by_modality(model, preprocessed_content)
+            category = _get_prediction_category(prediction)
+            # Store prediction under its category, accumulating all model predictions in a list
+            predictions_by_category.setdefault(category, []).append(prediction)
+        return predictions_by_category

@@ -4,19 +4,30 @@ from enum import Enum
 
 class RiskLevel(Enum):
     """Risk levels for content moderation"""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
 
 
 @dataclass
 class PolicyClassification:
-    """Final policy classification result"""
+    """
+    Final policy classification result after moderating content.
+    
+    Contains the risk level for each content category detected.
+    Aggregates predictions from multiple models (if present) by taking the
+    maximum risk level across all models for each category.
+    
+    Example:
+        PolicyClassification(
+            classifications={
+                "violence": RiskLevel.HIGH,
+                "hate_speech": RiskLevel.MEDIUM,
+                "sexual": RiskLevel.LOW
+            }
+        )
+    """
     classifications: dict[str, RiskLevel]
-
-    def to_dict(self) -> dict[str, str]:
-        """Convert to dictionary format"""
-        return {key: value.value for key, value in self.classifications.items()}
 
 
 class RiskClassifier:
@@ -31,7 +42,7 @@ class RiskClassifier:
             score: Average score (0.0-1.0)
 
         Returns:
-            RiskLevel (low, medium, or high)
+            RiskLevel (LOW=1, MEDIUM=2, HIGH=3)
         """
         if score < 0.3:
             return RiskLevel.LOW
@@ -39,18 +50,3 @@ class RiskClassifier:
             return RiskLevel.MEDIUM
         else:
             return RiskLevel.HIGH
-
-    @staticmethod
-    def average_prediction_scores(scores: dict[str, float]) -> float:
-        """
-        Average all scores from a model prediction.
-
-        Args:
-            scores: Dictionary of metric scores
-
-        Returns:
-            Average score across all metrics
-        """
-        if not scores:
-            return 0.0
-        return sum(scores.values()) / len(scores)

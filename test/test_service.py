@@ -7,9 +7,8 @@ from src.service import (
     ModerationResult,
     ContentModerationService,
 )
-from src.preprocessor import TextPreprocessor, ImagePreprocessor, \
-    VideoPreprocessor
-from src.model import RandomHateSpeechModel, RandomSexualModel, RandomViolenceModel
+from src.preprocessor import TextPreprocessor, ImagePreprocessor, VideoPreprocessor, ContentPreprocessor
+from src.model import RandomHateSpeechModel, RandomSexualModel, RandomViolenceModel, ContentModerationModel
 from src.risk_classifier import RiskLevel, PolicyClassification
 
 
@@ -115,11 +114,12 @@ class TestContentModerationService:
 
         assert isinstance(result, ModerationResult)
         assert result.policy_classification is not None
-        assert len(result.model_predictions) == 3  # 3 models
-        # For text, predictions should be single ModelPrediction objects
-        for category, prediction in result.model_predictions.items():
-            assert not isinstance(prediction, list)
-            assert hasattr(prediction, 'to_dict')
+        assert len(result.model_predictions) == 3  # 3 categories
+        # For text, predictions should be single ModelPrediction objects in a list
+        for category, prediction_list in result.model_predictions.items():
+            assert isinstance(prediction_list, list)
+            for prediction in prediction_list:
+                assert hasattr(prediction, 'to_dict')
 
     @pytest.mark.asyncio
     async def test_moderate_image_content(self, service):
@@ -136,10 +136,11 @@ class TestContentModerationService:
         assert isinstance(result, ModerationResult)
         assert result.policy_classification is not None
         assert len(result.model_predictions) == 3
-        # For image, predictions should be single ModelPrediction objects
-        for category, prediction in result.model_predictions.items():
-            assert not isinstance(prediction, list)
-            assert hasattr(prediction, 'to_dict')
+        # For image, predictions should be single ModelPrediction objects in a list
+        for category, prediction_list in result.model_predictions.items():
+            assert isinstance(prediction_list, list)
+            for prediction in prediction_list:
+                assert hasattr(prediction, 'to_dict')
 
     @pytest.mark.asyncio
     async def test_moderate_video_content(self, service):
@@ -156,12 +157,14 @@ class TestContentModerationService:
         assert isinstance(result, ModerationResult)
         assert result.policy_classification is not None
         assert len(result.model_predictions) == 3
-        # For video, predictions should be lists of ModelPrediction objects
-        for category, predictions in result.model_predictions.items():
-            assert isinstance(predictions, list)
-            assert len(predictions) > 0
-            for prediction in predictions:
-                assert hasattr(prediction, 'to_dict')
+        # For video, predictions should be lists of ModelPrediction objects (per model)
+        for category, prediction_list in result.model_predictions.items():
+            assert isinstance(prediction_list, list)
+            # Each model prediction should be a list of frames
+            for model_prediction in prediction_list:
+                assert isinstance(model_prediction, list)
+                for frame_prediction in model_prediction:
+                    assert hasattr(frame_prediction, 'to_dict')
 
     @pytest.mark.asyncio
     async def test_policy_classification_has_all_categories(self, service):
@@ -204,12 +207,13 @@ class TestContentModerationService:
         )
         result = await service.moderate(request)
 
-        for category, prediction in result.model_predictions.items():
-            scores_dict = prediction.to_dict()
-            assert isinstance(scores_dict, dict)
-            assert len(scores_dict) > 0
-            # All scores should be floats between 0-1
-            assert all(isinstance(v, float) and 0 <= v <= 1 for v in scores_dict.values())
+        for category, prediction_list in result.model_predictions.items():
+            for prediction in prediction_list:
+                scores_dict = prediction.to_dict()
+                assert isinstance(scores_dict, dict)
+                assert len(scores_dict) > 0
+                # All scores should be floats between 0-1
+                assert all(isinstance(v, float) and 0 <= v <= 1 for v in scores_dict.values())
 
     @pytest.mark.asyncio
     async def test_moderate_with_valid_request(self, service):
@@ -297,30 +301,35 @@ class TestContentModerationServiceIntegration:
     @pytest.mark.asyncio
     async def test_video_predictions_are_per_frame(self):
         """Verify video predictions contain per-frame data"""
-        preprocessors = {
+        preprocessors: dict[str, ContentPreprocessor] = {
             "text": TextPreprocessor(),
             "image": ImagePreprocessor(),
             "video": VideoPreprocessor()
         }
-        models = [RandomHateSpeechModel(), RandomSexualModel(), RandomViolenceModel()]
-        service = ContentModerationService(preprocessors, models)
+        models: list[ContentModerationModel] = [RandomHateSpeechModel(), RandomSexualModel(), RandomViolenceModel()]
+        service: ContentModerationService = ContentModerationService(preprocessors, models)
         # Create a video request with multiple frames
         # Each frame encoded separately in a list
-        frame1_b64 = base64.b64encode(b"frame1").decode('utf-8')
-        frame2_b64 = base64.b64encode(b"frame2").decode('utf-8')
-        frame3_b64 = base64.b64encode(b"frame3").decode('utf-8')
-        request = ModerationRequest(
+        frame1_b64: str = base64.b64encode(b"frame1").decode('utf-8')
+        frame2_b64: str = base64.b64encode(b"frame2").decode('utf-8')
+        frame3_b64: str = base64.b64encode(b"frame3").decode('utf-8')
+        request: ModerationRequest = ModerationRequest(
             content=[frame1_b64, frame2_b64, frame3_b64],
             modality=Modality.VIDEO,
             customer="video_test"
         )
-        result = await service.moderate(request)
+        result: ModerationResult = await service.moderate(request)
 
-        # Verify video predictions are lists
-        for category, predictions in result.model_predictions.items():
-            assert isinstance(predictions, list)
-            assert len(predictions) == 3  # Should have 3 frame predictions
-            for prediction in predictions:
-                assert hasattr(prediction, 'to_dict')
-                scores = prediction.to_dict()
-                assert all(0 <= v <= 1 for v in scores.values())
+        # Verify video predictions: model_predictions[category] = list of model predictions
+        # For video, each model prediction is a list of frames
+        for category, model_predictions_list in result.model_predictions.items():
+            assert isinstance(model_predictions_list, list)
+            # Each element is one model's prediction for this category
+            for model_prediction in model_predictions_list:
+                # For video, each model returns a list of frames
+                assert isinstance(model_prediction, list)
+                assert len(model_prediction) == 3  # Should have 3 frame predictions
+                for frame_prediction in model_prediction:
+                    assert hasattr(frame_prediction, 'to_dict')
+                    scores: dict[str, float] = frame_prediction.to_dict()
+                    assert all(0 <= v <= 1 for v in scores.values())

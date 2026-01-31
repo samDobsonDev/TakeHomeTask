@@ -2,7 +2,8 @@ import pytest
 import json
 import base64
 from unittest.mock import MagicMock
-from src.service import Modality, ModerationRequest
+from src.service import Modality, ModerationRequest, ModerationResult
+from src.risk_classifier import RiskLevel, PolicyClassification
 from src.request_handler import (
     ServiceContainer,
     RequestHandler,
@@ -10,6 +11,43 @@ from src.request_handler import (
     format_success_response,
     format_error_response,
 )
+
+
+def build_moderation_result(predictions_dict: dict, policy_classifications: dict[str, RiskLevel] = None) -> ModerationResult:
+    """
+    Helper to build a ModerationResult for testing format_success_response.
+    
+    Args:
+        predictions_dict: Dict mapping category to prediction(s). Single predictions are auto-wrapped in lists.
+        policy_classifications: Optional dict mapping category to RiskLevel (computed if not provided)
+    
+    Returns:
+        ModerationResult with PolicyClassification and model_predictions
+    """
+    # Normalize predictions_dict: wrap single predictions in lists
+    normalized_predictions: dict = {}
+    for category, prediction in predictions_dict.items():
+        if isinstance(prediction, list):
+            normalized_predictions[category] = prediction
+        else:
+            # Wrap single prediction in a list
+            normalized_predictions[category] = [prediction]
+    if policy_classifications is None:
+        # Auto-compute risk levels from predictions
+        policy_classifications = {}
+        for category, predictions_list in normalized_predictions.items():
+            from src.score_calculator import ScoreCalculator
+            from src.risk_classifier import RiskClassifier
+            # Compute max score across all predictions for this category
+            scores_list = [ScoreCalculator.compute_average_score(p) for p in predictions_list]
+            max_score = max(scores_list)
+            policy_classifications[category] = RiskClassifier.classify_score(max_score)
+    
+    policy_classification = PolicyClassification(classifications=policy_classifications)
+    return ModerationResult(
+        policy_classification=policy_classification,
+        model_predictions=normalized_predictions
+    )
 
 
 class TestServiceContainer:
@@ -174,124 +212,131 @@ class TestFormatSuccessResponse:
 
     def test_format_success_response_single_prediction_structure(self):
         """Verify success response has correct structure for single prediction"""
-        mock_prediction = MagicMock()
+        mock_prediction: MagicMock = MagicMock()
         mock_prediction.to_dict.return_value = {"metric1": 0.5}
         mock_prediction.model_name = "TestModel"
-        predictions = {
-            "hate_speech": mock_prediction,
-            "sexual": mock_prediction,
-            "violence": mock_prediction
+        # For single model per category, only include one category
+        predictions_dict: dict = {
+            "hate_speech": mock_prediction
         }
-        response = format_success_response(predictions)
+        moderation_result: ModerationResult = build_moderation_result(predictions_dict)
+        response = format_success_response(moderation_result)
 
-        assert response["status"] == "success"
-        assert "results" in response
-        assert "hate_speech" in response["results"]
+        assert response.status == "success"
+        assert "hate_speech" in response.results
 
     def test_format_success_response_includes_risk_levels(self):
         """Verify success response includes risk levels"""
-        mock_prediction = MagicMock()
+        mock_prediction: MagicMock = MagicMock()
         mock_prediction.to_dict.return_value = {"metric": 0.5}
         mock_prediction.model_name = "TestModel"
-        predictions = {
+        # Test with multiple categories to verify each gets a risk level
+        predictions_dict: dict = {
             "hate_speech": mock_prediction,
             "sexual": mock_prediction,
             "violence": mock_prediction
         }
-        response = format_success_response(predictions)
+        moderation_result: ModerationResult = build_moderation_result(predictions_dict)
+        response = format_success_response(moderation_result)
 
-        assert "risk_level" in response["results"]["hate_speech"]
-        assert "risk_level" in response["results"]["sexual"]
-        assert "risk_level" in response["results"]["violence"]
+        assert response.results["hate_speech"].risk_level is not None
+        assert isinstance(response.results["hate_speech"].risk_level, RiskLevel)
+        assert response.results["sexual"].risk_level is not None
+        assert response.results["violence"].risk_level is not None
 
     def test_format_success_response_includes_scores(self):
         """Verify success response includes detailed scores"""
-        mock_prediction = MagicMock()
+        mock_prediction: MagicMock = MagicMock()
         mock_prediction.to_dict.return_value = {"metric1": 0.5, "metric2": 0.3}
         mock_prediction.model_name = "TestModel"
-        predictions = {
-            "hate_speech": mock_prediction,
-            "sexual": mock_prediction,
-            "violence": mock_prediction
+        # For single model per category, predictions_dict should have one model per category
+        predictions_dict: dict = {
+            "hate_speech": mock_prediction
         }
-        response = format_success_response(predictions)
+        moderation_result: ModerationResult = build_moderation_result(predictions_dict)
+        response = format_success_response(moderation_result)
 
-        assert response["results"]["hate_speech"]["scores"]["metric1"] == 0.5
-        assert response["results"]["hate_speech"]["scores"]["metric2"] == 0.3
+        assert response.results["hate_speech"].single_model is not None
+        assert response.results["hate_speech"].single_model.scores["metric1"] == 0.5
+        assert response.results["hate_speech"].single_model.scores["metric2"] == 0.3
 
     def test_format_success_response_includes_model_name(self):
         """Verify success response includes model_name"""
-        mock_prediction = MagicMock()
+        mock_prediction: MagicMock = MagicMock()
         mock_prediction.to_dict.return_value = {"metric": 0.5}
         mock_prediction.model_name = "HateSpeechModel"
-        predictions = {
+        predictions_dict: dict = {
             "hate_speech": mock_prediction
         }
-        response = format_success_response(predictions)
+        moderation_result: ModerationResult = build_moderation_result(predictions_dict)
+        response = format_success_response(moderation_result)
 
-        assert response["results"]["hate_speech"]["model_name"] == "HateSpeechModel"
+        assert response.results["hate_speech"].single_model.model_name == "HateSpeechModel"
 
     def test_format_success_response_video_predictions(self):
         """Verify success response for video predictions with frames"""
-        mock_prediction1 = MagicMock()
+        mock_prediction1: MagicMock = MagicMock()
         mock_prediction1.to_dict.return_value = {"metric": 0.3}
         mock_prediction1.model_name = "TestModel"
-        mock_prediction2 = MagicMock()
+        mock_prediction2: MagicMock = MagicMock()
         mock_prediction2.to_dict.return_value = {"metric": 0.7}
         mock_prediction2.model_name = "TestModel"
-        predictions = {
-            "hate_speech": [mock_prediction1, mock_prediction2]
+        # For video: single model with multiple frames, wrap in another list
+        # model_predictions structure: {category: [model1_frames_list]} where model1_frames_list = [frame1, frame2]
+        predictions_dict: dict = {
+            "hate_speech": [[mock_prediction1, mock_prediction2]]
         }
-        response = format_success_response(predictions)
+        moderation_result: ModerationResult = build_moderation_result(predictions_dict)
+        response = format_success_response(moderation_result)
 
-        assert response["status"] == "success"
-        assert "frames" in response["results"]["hate_speech"]
-        assert len(response["results"]["hate_speech"]["frames"]) == 2
-        assert response["results"]["hate_speech"]["frames"][0]["frame"] == 0
-        assert response["results"]["hate_speech"]["frames"][1]["frame"] == 1
+        assert response.status == "success"
+        assert response.results["hate_speech"].single_model is not None
+        assert len(response.results["hate_speech"].single_model.frames) == 2
+        assert response.results["hate_speech"].single_model.frames[0].frame == 0
+        assert response.results["hate_speech"].single_model.frames[1].frame == 1
 
     def test_format_success_response_video_includes_model_name(self):
         """Verify success response for video predictions includes model_name at category level"""
-        mock_prediction1 = MagicMock()
+        mock_prediction1: MagicMock = MagicMock()
         mock_prediction1.to_dict.return_value = {"metric": 0.3}
         mock_prediction1.model_name = "ViolenceModel"
-        mock_prediction2 = MagicMock()
+        mock_prediction2: MagicMock = MagicMock()
         mock_prediction2.to_dict.return_value = {"metric": 0.7}
         mock_prediction2.model_name = "ViolenceModel"
-        predictions = {
-            "violence": [mock_prediction1, mock_prediction2]
+        # For video: single model with multiple frames, wrap in another list
+        predictions_dict: dict = {
+            "violence": [[mock_prediction1, mock_prediction2]]
         }
-        response = format_success_response(predictions)
+        moderation_result: ModerationResult = build_moderation_result(predictions_dict)
+        response = format_success_response(moderation_result)
 
-        # Model name at category level
-        assert response["results"]["violence"]["model_name"] == "ViolenceModel"
+        # Model name at model result level
+        assert response.results["violence"].single_model.model_name == "ViolenceModel"
         # Should have frames (single model video frames)
-        assert "frames" in response["results"]["violence"]
-        assert len(response["results"]["violence"]["frames"]) == 2
-        assert "model_name" not in response["results"]["violence"]["frames"][0]
-        assert "model_name" not in response["results"]["violence"]["frames"][1]
+        assert len(response.results["violence"].single_model.frames) == 2
+        assert response.results["violence"].single_model.frames[0].frame == 0
+        assert response.results["violence"].single_model.frames[1].frame == 1
 
     def test_format_success_response_multiple_models_same_category(self):
         """Verify success response for multiple models predicting same category"""
-        mock_prediction1 = MagicMock()
+        mock_prediction1: MagicMock = MagicMock()
         mock_prediction1.to_dict.return_value = {"metric": 0.3}
         mock_prediction1.model_name = "RandomViolenceModel"
-        mock_prediction2 = MagicMock()
+        mock_prediction2: MagicMock = MagicMock()
         mock_prediction2.to_dict.return_value = {"metric": 0.7}
         mock_prediction2.model_name = "OpenAIViolenceModel"
-        predictions = {
+        predictions_dict: dict = {
             "violence": [mock_prediction1, mock_prediction2]
         }
-        response = format_success_response(predictions)
+        moderation_result: ModerationResult = build_moderation_result(predictions_dict)
+        response = format_success_response(moderation_result)
 
         # Should have models array (multiple models)
-        assert "models" in response["results"]["violence"]
-        assert len(response["results"]["violence"]["models"]) == 2
-        assert response["results"]["violence"]["models"][0]["model_name"] == "RandomViolenceModel"
-        assert response["results"]["violence"]["models"][1]["model_name"] == "OpenAIViolenceModel"
-        # Should NOT have frames or single model_name
-        assert "frames" not in response["results"]["violence"]
-        assert "model_name" not in response["results"]["violence"]
+        assert len(response.results["violence"].models) == 2
+        assert response.results["violence"].models[0].model_name == "RandomViolenceModel"
+        assert response.results["violence"].models[1].model_name == "OpenAIViolenceModel"
+        # Should NOT have single_model
+        assert response.results["violence"].single_model is None
 
 
 class TestFormatErrorResponse:
@@ -301,21 +346,21 @@ class TestFormatErrorResponse:
         """Verify error response has correct structure"""
         response = format_error_response("Test error", 400)
 
-        assert response["status"] == "error"
-        assert response["error"] == "Test error"
-        assert response["status_code"] == 400
+        assert response.status == "error"
+        assert response.error == "Test error"
+        assert response.status_code == 400
 
     def test_format_error_response_400(self):
         """Verify 400 error response"""
         response = format_error_response("Bad request", 400)
 
-        assert response["status_code"] == 400
+        assert response.status_code == 400
 
     def test_format_error_response_500(self):
         """Verify 500 error response"""
         response = format_error_response("Internal error", 500)
 
-        assert response["status_code"] == 500
+        assert response.status_code == 500
 
 
 class TestRequestHandler:
@@ -346,8 +391,8 @@ class TestRequestHandler:
         })
         response = await handler.handle_moderate_request(request_json)
 
-        assert response["status"] == "success"
-        assert "results" in response
+        assert response.status == "success"
+        assert len(response.results) > 0
 
     @pytest.mark.asyncio
     async def test_handle_moderate_request_valid_video(self):
@@ -362,8 +407,8 @@ class TestRequestHandler:
         })
         response = await handler.handle_moderate_request(request_json)
 
-        assert response["status"] == "success"
-        assert "results" in response
+        assert response.status == "success"
+        assert len(response.results) > 0
 
     @pytest.mark.asyncio
     async def test_handle_moderate_request_invalid_json(self):
@@ -371,8 +416,8 @@ class TestRequestHandler:
         handler = RequestHandler()
         response = await handler.handle_moderate_request("invalid json")
 
-        assert response["status"] == "error"
-        assert response["status_code"] == 400
+        assert response.status == "error"
+        assert response.status_code == 400
 
     @pytest.mark.asyncio
     async def test_handle_moderate_request_missing_field(self):
@@ -385,9 +430,9 @@ class TestRequestHandler:
         })
         response = await handler.handle_moderate_request(request_json)
 
-        assert response["status"] == "error"
-        assert response["status_code"] == 400
-        assert "Missing required field" in response["error"]
+        assert response.status == "error"
+        assert response.status_code == 400
+        assert "Missing required field" in response.error
 
     @pytest.mark.asyncio
     async def test_handle_moderate_request_invalid_modality(self):
@@ -400,8 +445,8 @@ class TestRequestHandler:
         })
         response = await handler.handle_moderate_request(request_json)
 
-        assert response["status"] == "error"
-        assert response["status_code"] == 400
+        assert response.status == "error"
+        assert response.status_code == 400
 
     @pytest.mark.asyncio
     async def test_handle_moderate_request_empty_content(self):
@@ -414,9 +459,9 @@ class TestRequestHandler:
         })
         response = await handler.handle_moderate_request(request_json)
 
-        assert response["status"] == "error"
-        assert response["status_code"] == 400
-        assert "empty" in response["error"].lower()
+        assert response.status == "error"
+        assert response.status_code == 400
+        assert "empty" in response.error.lower()
 
     @pytest.mark.asyncio
     async def test_handle_moderate_request_video_not_list(self):
@@ -429,5 +474,5 @@ class TestRequestHandler:
         })
         response = await handler.handle_moderate_request(request_json)
 
-        assert response["status"] == "error"
-        assert response["status_code"] == 400
+        assert response.status == "error"
+        assert response.status_code == 400

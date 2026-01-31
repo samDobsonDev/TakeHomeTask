@@ -1,4 +1,3 @@
-import pytest
 from src.risk_classifier import RiskLevel, PolicyClassification, RiskClassifier
 
 
@@ -39,72 +38,6 @@ class TestRiskClassifierClassifyScore:
         assert RiskClassifier.classify_score(0.60001) == RiskLevel.HIGH
 
 
-class TestRiskClassifierAverageScores:
-    """Test RiskClassifier.average_prediction_scores() method"""
-
-    def test_average_scores_single_metric(self):
-        """Verify averaging works with single metric"""
-        scores = {"metric1": 0.5}
-        assert RiskClassifier.average_prediction_scores(scores) == 0.5
-
-    def test_average_scores_multiple_metrics(self):
-        """Verify averaging works with multiple metrics"""
-        scores = {
-            "metric1": 0.2,
-            "metric2": 0.4,
-            "metric3": 0.6
-        }
-        assert RiskClassifier.average_prediction_scores(scores) == pytest.approx(0.4)
-
-    def test_average_scores_all_same(self):
-        """Verify averaging when all metrics are identical"""
-        scores = {
-            "metric1": 0.5,
-            "metric2": 0.5,
-            "metric3": 0.5,
-            "metric4": 0.5
-        }
-        assert RiskClassifier.average_prediction_scores(scores) == 0.5
-
-    def test_average_scores_zero(self):
-        """Verify averaging with zero scores"""
-        scores = {
-            "metric1": 0.0,
-            "metric2": 0.0
-        }
-        assert RiskClassifier.average_prediction_scores(scores) == 0.0
-
-    def test_average_scores_one(self):
-        """Verify averaging with maximum scores"""
-        scores = {
-            "metric1": 1.0,
-            "metric2": 1.0
-        }
-        assert RiskClassifier.average_prediction_scores(scores) == 1.0
-
-    def test_average_scores_empty_dict(self):
-        """Verify averaging with empty dictionary returns 0.0"""
-        scores = {}
-        assert RiskClassifier.average_prediction_scores(scores) == 0.0
-
-    def test_average_scores_mixed_values(self):
-        """Verify averaging with mixed high and low values"""
-        scores = {
-            "low1": 0.1,
-            "low2": 0.2,
-            "high1": 0.9,
-            "high2": 0.8
-        }
-        expected = (0.1 + 0.2 + 0.9 + 0.8) / 4
-        assert RiskClassifier.average_prediction_scores(scores) == pytest.approx(expected)
-
-    def test_average_scores_many_metrics(self):
-        """Verify averaging with many metrics"""
-        scores = {f"metric_{i}": i / 10.0 for i in range(11)}
-        expected = sum(scores.values()) / len(scores)
-        assert RiskClassifier.average_prediction_scores(scores) == pytest.approx(expected)
-
-
 class TestRiskClassificationWorkflow:
     """Test complete classification workflow"""
 
@@ -115,8 +48,7 @@ class TestRiskClassificationWorkflow:
             "severe_toxicity": 0.2,
             "obscene": 0.15
         }
-
-        avg = RiskClassifier.average_prediction_scores(scores)
+        avg = sum(scores.values()) / len(scores)
         risk_level = RiskClassifier.classify_score(avg)
 
         assert risk_level == RiskLevel.LOW
@@ -128,8 +60,7 @@ class TestRiskClassificationWorkflow:
             "adult_content": 0.5,
             "adult_toys": 0.45
         }
-
-        avg = RiskClassifier.average_prediction_scores(scores)
+        avg = sum(scores.values()) / len(scores)
         risk_level = RiskClassifier.classify_score(avg)
 
         assert risk_level == RiskLevel.MEDIUM
@@ -141,8 +72,7 @@ class TestRiskClassificationWorkflow:
             "firearm": 0.9,
             "knife": 0.85
         }
-
-        avg = RiskClassifier.average_prediction_scores(scores)
+        avg = sum(scores.values()) / len(scores)
         risk_level = RiskClassifier.classify_score(avg)
 
         assert risk_level == RiskLevel.HIGH
@@ -152,9 +82,9 @@ class TestRiskClassificationWorkflow:
         hate_scores = {"toxicity": 0.1, "insult": 0.2}
         sexual_scores = {"sexual_explicit": 0.5}
         violence_scores = {"violence": 0.8, "firearm": 0.9}
-        hate_avg = RiskClassifier.average_prediction_scores(hate_scores)
-        sexual_avg = RiskClassifier.average_prediction_scores(sexual_scores)
-        violence_avg = RiskClassifier.average_prediction_scores(violence_scores)
+        hate_avg = sum(hate_scores.values()) / len(hate_scores)
+        sexual_avg = sum(sexual_scores.values()) / len(sexual_scores)
+        violence_avg = sum(violence_scores.values()) / len(violence_scores)
         classification = PolicyClassification(
             classifications={
                 "hate_speech": RiskClassifier.classify_score(hate_avg),
@@ -170,7 +100,7 @@ class TestRiskClassificationWorkflow:
     def test_policy_classification_partial_categories(self):
         """Verify PolicyClassification works with only some categories"""
         hate_scores = {"toxicity": 0.1, "insult": 0.2}
-        hate_avg = RiskClassifier.average_prediction_scores(hate_scores)
+        hate_avg = sum(hate_scores.values()) / len(hate_scores)
         classification = PolicyClassification(
             classifications={
                 "hate_speech": RiskClassifier.classify_score(hate_avg)
