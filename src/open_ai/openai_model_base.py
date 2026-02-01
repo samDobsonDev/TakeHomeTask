@@ -1,22 +1,28 @@
 from abc import ABC, abstractmethod
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Type, get_args
 from pydantic import BaseModel
 from src.model import ContentModerationModel, ModelPrediction
 from src.preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo, PreprocessedContent
 from src.open_ai.openai_client import OpenAIClient
+from src.pydantic_generator import prediction_to_pydantic
 
-# Type variables for OpenAI content moderation models
-# PredictionType: The final typed prediction output (e.g., HateSpeechPrediction)
-# ResponseType: The OpenAI structured response format (e.g., HateSpeechScores)
+# Type variable for OpenAI content moderation models
 PredictionType = TypeVar('PredictionType', bound=ModelPrediction)
-ResponseType = TypeVar('ResponseType', bound=BaseModel)
 
-class OpenAIContentModerationModel(ContentModerationModel[PredictionType], ABC, Generic[PredictionType, ResponseType]):
+
+class OpenAIContentModerationModel(ContentModerationModel[PredictionType], ABC, Generic[PredictionType]):
     """
     Base class for OpenAI-powered content moderation models.
 
     Handles the common logic for calling OpenAI and converting responses to predictions.
-    Subclasses define model configuration and response format.
+    Subclasses only need to define:
+    - name: The model name
+    - get_model_name(): The OpenAI model to use
+    - get_text_prompt(): Prompt for text analysis
+    - get_image_prompt(): Prompt for image analysis
+
+    The prediction class is automatically extracted from the generic type parameter,
+    and the Pydantic response format is generated from it.
     """
 
     def __init__(self, api_key: str = None):
@@ -38,15 +44,37 @@ class OpenAIContentModerationModel(ContentModerationModel[PredictionType], ABC, 
         """Return the prompt for image analysis"""
         pass
 
-    @abstractmethod
-    def get_response_format(self) -> type[ResponseType]:
-        """Return the Pydantic model for response format"""
-        pass
+    @property
+    def _prediction_class(self) -> Type[PredictionType]:
+        """
+        Extract the prediction class from the generic type parameter.
 
-    @abstractmethod
-    def _response_to_prediction(self, input_data: PreprocessedContent, response: ResponseType) -> PredictionType:
-        """Convert OpenAI response to prediction dataclass"""
-        pass
+        For a class like OpenAIHateSpeechModel(OpenAIContentModerationModel[HateSpeechPrediction]),
+        this returns HateSpeechPrediction.
+        """
+        orig_bases = getattr(self.__class__, '__orig_bases__', ())
+        for base in orig_bases:
+            args = get_args(base)
+            if args and isinstance(args[0], type) and issubclass(args[0], ModelPrediction):
+                return args[0]
+        raise TypeError(f"{self.__class__.__name__} must specify a prediction type parameter")
+
+    def get_response_format(self) -> Type[BaseModel]:
+        """
+        Return the Pydantic model for response format.
+
+        Automatically generated from the prediction class to ensure consistency.
+        """
+        return prediction_to_pydantic(self._prediction_class)
+
+    def _response_to_prediction(self, input_data: PreprocessedContent, response: BaseModel) -> PredictionType:
+        """
+        Convert OpenAI response to prediction dataclass.
+
+        Default implementation maps all fields from the response to the prediction class.
+        """
+        scores = {field_name: getattr(response, field_name) for field_name in response.model_fields.keys()}
+        return self._prediction_class(input_data=input_data, model_name=self.name, **scores)
 
     async def predict_text(self, input_data: PreprocessedText) -> PredictionType:
         """Analyze text using OpenAI"""

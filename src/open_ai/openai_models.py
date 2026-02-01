@@ -1,34 +1,8 @@
 from src.open_ai.openai_model_base import OpenAIContentModerationModel
 from src.model import HateSpeechPrediction, SexualPrediction, ViolencePrediction
-from src.preprocessor import PreprocessedContent
-from pydantic import BaseModel
 
 
-class HateSpeechScores(BaseModel):
-    """Structured output for hate speech scores"""
-    toxicity: float
-    severe_toxicity: float
-    obscene: float
-    insult: float
-    identity_attack: float
-    threat: float
-
-
-class SexualScores(BaseModel):
-    """Structured output for sexual content scores"""
-    sexual_explicit: float
-    adult_content: float
-    adult_toys: float
-
-
-class ViolenceScores(BaseModel):
-    """Structured output for violence scores"""
-    violence: float
-    firearm: float
-    knife: float
-
-
-class OpenAIHateSpeechModel(OpenAIContentModerationModel[HateSpeechPrediction, HateSpeechScores]):
+class OpenAIHateSpeechModel(OpenAIContentModerationModel[HateSpeechPrediction]):
     """OpenAI-powered hate speech detection model"""
     name = "OpenAIHateSpeechModel"
 
@@ -51,17 +25,8 @@ class OpenAIHateSpeechModel(OpenAIContentModerationModel[HateSpeechPrediction, H
 
         Metrics: toxicity, severe_toxicity, obscene, insult, identity_attack, threat"""
 
-    def get_response_format(self) -> type[HateSpeechScores]:
-        return HateSpeechScores
 
-    def _response_to_prediction(self, input_data: PreprocessedContent,
-                                response: HateSpeechScores) -> HateSpeechPrediction:
-        """Convert response to prediction"""
-        scores = {field_name: getattr(response, field_name) for field_name in response.model_fields.keys()}
-        return HateSpeechPrediction(input_data=input_data, model_name=self.name, **scores)
-
-
-class OpenAISexualModel(OpenAIContentModerationModel[SexualPrediction, SexualScores]):
+class OpenAISexualModel(OpenAIContentModerationModel[SexualPrediction]):
     """OpenAI-powered sexual content detection model"""
     name = "OpenAISexualModel"
 
@@ -84,17 +49,8 @@ class OpenAISexualModel(OpenAIContentModerationModel[SexualPrediction, SexualSco
 
         Metrics: sexual_explicit, adult_content, adult_toys"""
 
-    def get_response_format(self) -> type[SexualScores]:
-        return SexualScores
 
-    def _response_to_prediction(self, input_data: PreprocessedContent,
-                                response: SexualScores) -> SexualPrediction:
-        """Convert response to prediction"""
-        scores = {field_name: getattr(response, field_name) for field_name in response.model_fields.keys()}
-        return SexualPrediction(input_data=input_data, model_name=self.name, **scores)
-
-
-class OpenAIViolenceModel(OpenAIContentModerationModel[ViolencePrediction, ViolenceScores]):
+class OpenAIViolenceModel(OpenAIContentModerationModel[ViolencePrediction]):
     """OpenAI-powered violence detection model"""
     name = "OpenAIViolenceModel"
 
@@ -116,12 +72,3 @@ class OpenAIViolenceModel(OpenAIContentModerationModel[ViolencePrediction, Viole
         - 1.0 = maximum severity
 
         Metrics: violence, firearm, knife"""
-
-    def get_response_format(self) -> type[ViolenceScores]:
-        return ViolenceScores
-
-    def _response_to_prediction(self, input_data: PreprocessedContent,
-                                response: ViolenceScores) -> ViolencePrediction:
-        """Convert response to prediction"""
-        scores = {field_name: getattr(response, field_name) for field_name in response.model_fields.keys()}
-        return ViolencePrediction(input_data=input_data, model_name=self.name, **scores)

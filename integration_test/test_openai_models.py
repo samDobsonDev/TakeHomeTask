@@ -126,7 +126,7 @@ class TestOpenAIViolenceModel:
         assert prediction.firearm < 0.5, f"Expected firearm score < 0.5, got {prediction.firearm}"
 
     @pytest.mark.asyncio
-    async def test_analyze_video_batch_api_with_5_frames(self):
+    async def test_analyze_video_with_5_frames(self):
         """Test violence prediction on video with 5 frames"""
         model = OpenAIViolenceModel(api_key=OPENAI_API_KEY)
         gun_image_bytes = fetch_image_from_url(

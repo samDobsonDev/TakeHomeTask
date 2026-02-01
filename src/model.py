@@ -17,7 +17,7 @@ class Category(Enum):
 class ModelPrediction(ABC):
     """Base class for model predictions"""
     input_data: PreprocessedContent
-    model_name: str  # Name of the model that made this prediction
+    model_name: str
 
     @classmethod
     @abstractmethod
