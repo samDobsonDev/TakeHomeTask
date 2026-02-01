@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Union
 from dotenv import load_dotenv
-from src.request_handler import RequestHandler, ServiceContainer, ModerationResponse, ErrorResponse
+from src.request_handler import RequestHandler, ServiceContainer, ModerationResponse, ErrorResponse, VideoModelResult
 from src.content_loader import ContentLoader
 from src.model import RandomViolenceModel, RandomHateSpeechModel
 from src.open_ai.openai_models import OpenAIViolenceModel, OpenAIHateSpeechModel
@@ -19,40 +19,37 @@ load_dotenv()
 def print_moderation_response(response: Union[ModerationResponse, ErrorResponse]) -> None:
     """Pretty print a moderation response with all available fields"""
     print("\n" + "-" * 60)
-    print(f"Status: {response.status}")
-    if response.status == "error":
-        # Error response
+    if isinstance(response, ErrorResponse):
+        print("Status: error")
         print(f"Error: {response.error}")
         print(f"Status Code: {response.status_code}")
     else:
-        # Moderation response
+        print("Status: success")
         print(f"\nResults ({len(response.results)} categories):")
         for category, result in response.results.items():
             print(f"\n  {category.upper()}:")
             print(f"    Risk Level: {result.risk_level}")
-            if result.single_model:
-                print(f"    Model: {result.single_model.model_name}")
-                # Only show scores if there are no frames (text/image)
-                if result.single_model.frames:
-                    print(f"    Video Frames: {len(result.single_model.frames)}")
-                    for frame in result.single_model.frames:
+            if len(result.models) == 1:
+                # Single model
+                model = result.models[0]
+                print(f"    Model: {model.model_name}")
+                if isinstance(model, VideoModelResult):
+                    print(f"    Video Frames: {len(model.frames)}")
+                    for frame in model.frames:
                         print(f"      Frame {frame.frame}: risk={frame.risk_level}, scores={frame.scores}")
                 else:
-                    # Only show scores if they exist (text/image)
-                    if result.single_model.scores:
-                        print(f"    Scores: {result.single_model.scores}")
-            if result.models:
+                    print(f"    Scores: {model.scores}")
+            else:
+                # Multiple models
                 print(f"    Multiple Models: {len(result.models)}")
                 for model in result.models:
                     print(f"      - {model.model_name}: risk={model.risk_level}")
-                    # Show frames if they exist (video), otherwise show scores (text/image)
-                    if model.frames:
+                    if isinstance(model, VideoModelResult):
                         print(f"        Frames: {len(model.frames)}")
                         for frame in model.frames:
                             print(f"          Frame {frame.frame}: risk={frame.risk_level}, scores={frame.scores}")
-                    elif model.scores:
+                    else:
                         print(f"        Scores: {model.scores}")
-    
     print("-" * 60 + "\n")
 
 

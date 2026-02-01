@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass, field
-from typing import Union, Optional
+from typing import Union
 from src.risk_classifier import RiskClassifier, RiskLevel
 from src.score_calculator import ScoreCalculator
 from src.service import ContentModerationService, ModerationRequest, Modality, ModerationResult
@@ -16,35 +16,42 @@ class FrameResult:
 
 
 @dataclass
-class SingleModelResult:
-    """Result for a single model prediction (text/image or video)"""
+class ModelResult:
+    """Base class for model prediction results"""
     model_name: str
     risk_level: RiskLevel
-    scores: dict[str, float] = field(default_factory=dict)  # Empty for video (scores only in frames)
-    frames: list[FrameResult] = field(default_factory=list)
+
+
+@dataclass
+class TextImageModelResult(ModelResult):
+    """Result for text/image model prediction"""
+    scores: dict[str, float]
+
+
+@dataclass
+class VideoModelResult(ModelResult):
+    """Result for video model prediction"""
+    frames: list[FrameResult]
 
 
 @dataclass
 class CategoryResult:
-    """Result for a content category"""
-    risk_level: RiskLevel  # Always present - computed from scores
-    single_model: Optional[SingleModelResult] = None  # Present for single model (text/image/video)
-    models: list[SingleModelResult] = field(default_factory=list)  # Present for multiple models
+    """Result for a content category (single model = list with one item)"""
+    risk_level: RiskLevel
+    models: list[Union[TextImageModelResult, VideoModelResult]]
 
 
 @dataclass
 class ModerationResponse:
     """Successful moderation response"""
-    status: str = "success"
-    results: dict[str, CategoryResult] = field(default_factory=dict)
+    results: dict[str, CategoryResult]
 
 
 @dataclass
 class ErrorResponse:
     """Error response"""
-    status: str = "error"
-    error: Optional[str] = None
-    status_code: Optional[int] = None
+    error: str
+    status_code: int
 
 
 class ServiceContainer:
@@ -151,38 +158,27 @@ def format_success_response(moderation_result: ModerationResult) -> ModerationRe
     
     Output: ModerationResponse with organized results, reusing computed risk levels
     """
-    response = ModerationResponse()
+    results: dict[str, CategoryResult] = {}
     policy_classifications: dict[str, RiskLevel] = moderation_result.policy_classification.classifications
     for category, model_predictions in moderation_result.model_predictions.items():
-        # Use the pre-computed risk level from policy classification
-        category_risk_level: RiskLevel = policy_classifications.get(category, RiskLevel.LOW)
-        if len(model_predictions) == 1:
-            # Single model - build simple response
-            prediction = model_predictions[0]
-            model_result: SingleModelResult = _build_single_model_result(prediction)
-            response.results[category] = CategoryResult(
-                risk_level=category_risk_level,
-                single_model=model_result
-            )
-        else:
-            # Multiple models - build aggregated response
-            models_results: list[SingleModelResult] = [_build_single_model_result(model_prediction) for model_prediction in model_predictions]
-            response.results[category] = CategoryResult(
-                risk_level=category_risk_level,
-                models=models_results
-            )
-    return response
+        category_risk_level: RiskLevel = policy_classifications[category]
+        models_results: list[TextImageModelResult | VideoModelResult] = [_build_model_result(prediction) for prediction in model_predictions]
+        results[category] = CategoryResult(
+            risk_level=category_risk_level,
+            models=models_results
+        )
+    return ModerationResponse(results=results)
 
 
-def _build_single_model_result(prediction: Union[ModelPrediction, list[ModelPrediction]]) -> SingleModelResult:
+def _build_model_result(prediction: Union[ModelPrediction, list[ModelPrediction]]) -> Union[TextImageModelResult, VideoModelResult]:
     """
-    Build a SingleModelResult from either a single prediction or list of frames.
+    Build a model result from either a single prediction or list of frames.
     
     Args:
         prediction: Either a ModelPrediction (text/image) or list[ModelPrediction] (video)
     
     Returns:
-        SingleModelResult with populated fields
+        TextImageModelResult for text/image, VideoModelResult for video
     """
     if isinstance(prediction, list):
         # Video: list of frames
@@ -194,24 +190,21 @@ def _build_single_model_result(prediction: Union[ModelPrediction, list[ModelPred
             )
             for idx, frame in enumerate(prediction)
         ]
-        # Compute this model's risk level from its own frames
         model_avg_score = ScoreCalculator.compute_average_score(prediction)
         model_risk_level = RiskClassifier.classify_score(model_avg_score)
-        return SingleModelResult(
+        return VideoModelResult(
             model_name=prediction[0].model_name,
             risk_level=model_risk_level,
-            scores={},
             frames=frame_results
         )
     else:
         # Text/image: single prediction
         model_avg_score = ScoreCalculator.compute_average_score(prediction)
         model_risk_level = RiskClassifier.classify_score(model_avg_score)
-        return SingleModelResult(
+        return TextImageModelResult(
             model_name=prediction.model_name,
             risk_level=model_risk_level,
-            scores=prediction.to_dict(),
-            frames=[]
+            scores=prediction.to_dict()
         )
 
 
