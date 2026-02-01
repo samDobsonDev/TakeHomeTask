@@ -50,14 +50,6 @@ class SpamPrediction(ModelPrediction):
     @classmethod
     def get_category(cls) -> Category:
         return Category.SPAM  # Return the enum value
-
-    def to_dict(self) -> dict[str, float]:
-        return {
-            "spam_score": self.spam_score,
-            "promotional": self.promotional,
-            "phishing": self.phishing,
-            "scam": self.scam
-        }
 ```
 
 #### Step 3: Create the Model Class
