@@ -1,10 +1,3 @@
-"""
-Dynamic Pydantic model generation from ModelPrediction dataclasses.
-
-This module eliminates the need to manually maintain separate Pydantic models
-that mirror prediction dataclasses. When a prediction class changes, the
-generated Pydantic model automatically reflects those changes.
-"""
 from dataclasses import fields
 from functools import lru_cache
 from typing import Type
