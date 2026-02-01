@@ -1,4 +1,5 @@
 from src.risk_classifier import RiskLevel, PolicyClassification, RiskClassifier
+from src.model import Category
 
 
 class TestRiskClassifierClassifyScore:
@@ -87,15 +88,15 @@ class TestRiskClassificationWorkflow:
         violence_avg = sum(violence_scores.values()) / len(violence_scores)
         classification = PolicyClassification(
             classifications={
-                "hate_speech": RiskClassifier.classify_score(hate_avg),
-                "sexual": RiskClassifier.classify_score(sexual_avg),
-                "violence": RiskClassifier.classify_score(violence_avg)
+                Category.HATE_SPEECH.value: RiskClassifier.classify_score(hate_avg),
+                Category.SEXUAL.value: RiskClassifier.classify_score(sexual_avg),
+                Category.VIOLENCE.value: RiskClassifier.classify_score(violence_avg)
             }
         )
 
-        assert classification.classifications["hate_speech"] == RiskLevel.LOW
-        assert classification.classifications["sexual"] == RiskLevel.MEDIUM
-        assert classification.classifications["violence"] == RiskLevel.HIGH
+        assert classification.classifications[Category.HATE_SPEECH.value] == RiskLevel.LOW
+        assert classification.classifications[Category.SEXUAL.value] == RiskLevel.MEDIUM
+        assert classification.classifications[Category.VIOLENCE.value] == RiskLevel.HIGH
 
     def test_policy_classification_partial_categories(self):
         """Verify PolicyClassification works with only some categories"""
@@ -103,11 +104,11 @@ class TestRiskClassificationWorkflow:
         hate_avg = sum(hate_scores.values()) / len(hate_scores)
         classification = PolicyClassification(
             classifications={
-                "hate_speech": RiskClassifier.classify_score(hate_avg)
+                Category.HATE_SPEECH.value: RiskClassifier.classify_score(hate_avg)
             }
         )
 
-        assert "hate_speech" in classification.classifications
-        assert "sexual" not in classification.classifications
-        assert "violence" not in classification.classifications
-        assert classification.classifications["hate_speech"] == RiskLevel.LOW
+        assert Category.HATE_SPEECH.value in classification.classifications
+        assert Category.SEXUAL.value not in classification.classifications
+        assert Category.VIOLENCE.value not in classification.classifications
+        assert classification.classifications[Category.HATE_SPEECH.value] == RiskLevel.LOW

@@ -1,8 +1,16 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 import random
 from dataclasses import dataclass, fields
 from typing import Generic, TypeVar
 from src.preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo, PreprocessedContent
+
+
+class Category(Enum):
+    """Content moderation categories"""
+    HATE_SPEECH = "hate_speech"
+    SEXUAL = "sexual"
+    VIOLENCE = "violence"
 
 
 @dataclass
@@ -13,8 +21,8 @@ class ModelPrediction(ABC):
 
     @classmethod
     @abstractmethod
-    def get_category(cls) -> str:
-        """Return the category name for this prediction"""
+    def get_category(cls) -> Category:
+        """Return the category for this prediction"""
         pass
 
     def to_dict(self) -> dict[str, float]:
@@ -34,8 +42,8 @@ class HateSpeechPrediction(ModelPrediction):
     threat: float
 
     @classmethod
-    def get_category(cls) -> str:
-        return "hate_speech"
+    def get_category(cls) -> Category:
+        return Category.HATE_SPEECH
 
 
 @dataclass
@@ -46,8 +54,8 @@ class SexualPrediction(ModelPrediction):
     adult_toys: float
 
     @classmethod
-    def get_category(cls) -> str:
-        return "sexual"
+    def get_category(cls) -> Category:
+        return Category.SEXUAL
 
 
 @dataclass
@@ -58,8 +66,8 @@ class ViolencePrediction(ModelPrediction):
     knife: float
 
     @classmethod
-    def get_category(cls) -> str:
-        return "violence"
+    def get_category(cls) -> Category:
+        return Category.VIOLENCE
 
 
 class ContentModerationModel(ABC, Generic[PredictionType]):

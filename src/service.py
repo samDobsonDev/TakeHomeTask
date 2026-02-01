@@ -3,7 +3,7 @@ from enum import Enum
 import base64
 from typing import Union
 from src.preprocessor import ContentPreprocessor, PreprocessedContent, PreprocessedText, PreprocessedImage, PreprocessedVideo
-from src.model import ContentModerationModel, ModelPrediction
+from src.model import ContentModerationModel, ModelPrediction, Category
 from src.risk_classifier import RiskClassifier, PolicyClassification, RiskLevel
 from src.score_calculator import ScoreCalculator
 
@@ -37,6 +37,7 @@ class ModerationResult:
         policy_classification: Final risk levels per category (high/medium/low).
                               Aggregates across all models by taking the maximum risk.
         model_predictions: Raw predictions from all models, organized by category.
+                          Keys are Category enum values (e.g., Category.HATE_SPEECH.value).
                           Each category maps to either:
                           - A single ModelPrediction (text/image)
                           - A list of ModelPredictions (video frames)
@@ -45,12 +46,12 @@ class ModerationResult:
     Example:
         ModerationResult(
             policy_classification=PolicyClassification({
-                "violence": RiskLevel.HIGH,
-                "hate_speech": RiskLevel.LOW
+                Category.VIOLENCE.value: RiskLevel.HIGH,
+                Category.HATE_SPEECH.value: RiskLevel.LOW
             }),
             model_predictions={
-                "violence": [frame1, frame2, frame3],  # Video frames
-                "hate_speech": prediction_obj  # Single prediction
+                Category.VIOLENCE.value: [frame1, frame2, frame3],  # Video frames
+                Category.HATE_SPEECH.value: prediction_obj  # Single prediction
             }
         )
     """
@@ -119,7 +120,7 @@ async def _predict_by_modality(model: ContentModerationModel, content: Preproces
         raise ValueError(f"Unknown content type: {type(content)}")
 
 
-def _get_prediction_category(prediction: Union[ModelPrediction, list[ModelPrediction]]) -> str:
+def _get_prediction_category(prediction: Union[ModelPrediction, list[ModelPrediction]]) -> Category:
     """
     Extract the category from a prediction (single or list of frames).
     
@@ -127,7 +128,7 @@ def _get_prediction_category(prediction: Union[ModelPrediction, list[ModelPredic
         prediction: Either a single ModelPrediction or a list of ModelPredictions (video frames)
     
     Returns:
-        Category name from the prediction
+        Category enum value from the prediction
     """
     if isinstance(prediction, list):
         return prediction[0].get_category()
@@ -216,6 +217,6 @@ class ContentModerationService:
         for model in self.models:
             prediction: ModelPrediction | list[ModelPrediction] = await _predict_by_modality(model, preprocessed_content)
             category = _get_prediction_category(prediction)
-            # Store prediction under its category, accumulating all model predictions in a list
-            predictions_by_category.setdefault(category, []).append(prediction)
+            # Store prediction under its category (using .value for string key), accumulating all model predictions in a list
+            predictions_by_category.setdefault(category.value, []).append(prediction)
         return predictions_by_category

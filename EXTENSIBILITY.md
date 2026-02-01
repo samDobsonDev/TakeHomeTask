@@ -7,20 +7,34 @@ This document explains how to extend the content moderation system with new mode
 ## 1. Adding a New Model and Prediction Category
 
 Each model produces predictions for a specific category. To add a new model, you need to:
-1. Create a prediction class which defines the category and its scores (or use a relevant pre-existing one)
-2. Create a model class that implements the prediction logic
-3. Register the model in the service container
+1. Add the new category to the `Category` enum
+2. Create a prediction class that returns the new category
+3. Create a model class that implements the prediction logic
+4. Register the model in the service container
 
-The category is determined by the `get_category()` method on the prediction class - it automatically appears in moderation results.
+The category is determined by the `get_category()` method on the prediction class, which returns a `Category` enum value. The category automatically appears in moderation results.
 
 ### Files to Modify
 
-- `src/model.py` - Add prediction class and model
+- `src/model.py` - Add category enum value, prediction class, and model
 - `src/request_handler.py` - Register the model
 
 ### Example: Adding a Spam Detection Model
 
-#### Step 1: Create the Prediction Class
+#### Step 1: Add the Category Enum Value
+
+In `src/model.py`, add to the `Category` enum:
+
+```python
+class Category(Enum):
+    """Content moderation categories"""
+    HATE_SPEECH = "hate_speech"
+    SEXUAL = "sexual"
+    VIOLENCE = "violence"
+    SPAM = "spam"  # Add new category
+```
+
+#### Step 2: Create the Prediction Class
 
 Add to `src/model.py`:
 
@@ -34,8 +48,8 @@ class SpamPrediction(ModelPrediction):
     scam: float = 0.0
 
     @classmethod
-    def get_category(cls) -> str:
-        return "spam"  # This becomes the category key in results
+    def get_category(cls) -> Category:
+        return Category.SPAM  # Return the enum value
 
     def to_dict(self) -> dict[str, float]:
         return {
@@ -46,7 +60,7 @@ class SpamPrediction(ModelPrediction):
         }
 ```
 
-#### Step 2: Create the Model Class
+#### Step 3: Create the Model Class
 
 Add to `src/model.py`:
 
@@ -79,7 +93,7 @@ class RandomSpamModel(ContentModerationModel[SpamPrediction]):
         )
 ```
 
-#### Step 3: Register the Model
+#### Step 4: Register the Model
 
 In `src/request_handler.py`, update the `ServiceContainer.models` property:
 
@@ -97,7 +111,7 @@ def models(self) -> list[ContentModerationModel]:
     return self._models
 ```
 
-The new "spam" category will automatically appear in moderation results because the service groups predictions by their `get_category()` return value.
+The new "spam" category will automatically appear in moderation results. The service uses `category.value` (the string `"spam"`) as the dict key, so results can be accessed via `response.results[Category.SPAM.value]` or `response.results["spam"]`.
 
 ---
 

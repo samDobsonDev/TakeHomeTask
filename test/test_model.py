@@ -1,6 +1,7 @@
 import pytest
 from dataclasses import fields
 from src.model import (
+    Category,
     HateSpeechPrediction,
     SexualPrediction,
     ViolencePrediction,
@@ -39,15 +40,15 @@ class TestModelPredictionDataclasses:
 
     def test_hate_speech_prediction_get_category(self):
         """Verify HateSpeechPrediction returns correct category"""
-        assert HateSpeechPrediction.get_category() == "hate_speech"
+        assert HateSpeechPrediction.get_category() == Category.HATE_SPEECH
 
     def test_sexual_prediction_get_category(self):
         """Verify SexualPrediction returns correct category"""
-        assert SexualPrediction.get_category() == "sexual"
+        assert SexualPrediction.get_category() == Category.SEXUAL
 
     def test_violence_prediction_get_category(self):
         """Verify ViolencePrediction returns correct category"""
-        assert ViolencePrediction.get_category() == "violence"
+        assert ViolencePrediction.get_category() == Category.VIOLENCE
 
 
 class TestModelPredictionToDict:

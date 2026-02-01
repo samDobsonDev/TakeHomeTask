@@ -8,7 +8,7 @@ from src.service import (
     ContentModerationService,
 )
 from src.preprocessor import TextPreprocessor, ImagePreprocessor, VideoPreprocessor, ContentPreprocessor
-from src.model import RandomHateSpeechModel, RandomSexualModel, RandomViolenceModel, ContentModerationModel
+from src.model import RandomHateSpeechModel, RandomSexualModel, RandomViolenceModel, ContentModerationModel, Category
 from src.risk_classifier import RiskLevel, PolicyClassification
 
 
@@ -69,9 +69,9 @@ class TestModerationResult:
     def test_moderation_result_creation(self):
         classification = PolicyClassification(
             classifications={
-                "hate_speech": RiskLevel.LOW,
-                "sexual": RiskLevel.MEDIUM,
-                "violence": RiskLevel.HIGH
+                Category.HATE_SPEECH.value: RiskLevel.LOW,
+                Category.SEXUAL.value: RiskLevel.MEDIUM,
+                Category.VIOLENCE.value: RiskLevel.HIGH
             }
         )
         predictions = {}
@@ -177,12 +177,12 @@ class TestContentModerationService:
         result = await service.moderate(request)
         classification = result.policy_classification
 
-        assert "hate_speech" in classification.classifications
-        assert "sexual" in classification.classifications
-        assert "violence" in classification.classifications
-        assert isinstance(classification.classifications["hate_speech"], RiskLevel)
-        assert isinstance(classification.classifications["sexual"], RiskLevel)
-        assert isinstance(classification.classifications["violence"], RiskLevel)
+        assert Category.HATE_SPEECH.value in classification.classifications
+        assert Category.SEXUAL.value in classification.classifications
+        assert Category.VIOLENCE.value in classification.classifications
+        assert isinstance(classification.classifications[Category.HATE_SPEECH.value], RiskLevel)
+        assert isinstance(classification.classifications[Category.SEXUAL.value], RiskLevel)
+        assert isinstance(classification.classifications[Category.VIOLENCE.value], RiskLevel)
 
     @pytest.mark.asyncio
     async def test_model_predictions_have_correct_categories(self, service):
@@ -193,7 +193,7 @@ class TestContentModerationService:
             customer="test"
         )
         result = await service.moderate(request)
-        expected_categories = {"hate_speech", "sexual", "violence"}
+        expected_categories = {Category.HATE_SPEECH.value, Category.SEXUAL.value, Category.VIOLENCE.value}
 
         assert set(result.model_predictions.keys()) == expected_categories
 
@@ -270,9 +270,9 @@ class TestContentModerationServiceIntegration:
         # Verify complete result structure
         classifications = result.policy_classification.classifications
 
-        assert classifications["hate_speech"] in RiskLevel
-        assert classifications["sexual"] in RiskLevel
-        assert classifications["violence"] in RiskLevel
+        assert classifications[Category.HATE_SPEECH.value] in RiskLevel
+        assert classifications[Category.SEXUAL.value] in RiskLevel
+        assert classifications[Category.VIOLENCE.value] in RiskLevel
         assert len(result.model_predictions) == 3
 
     @pytest.mark.asyncio
@@ -294,9 +294,9 @@ class TestContentModerationServiceIntegration:
         classification = result.policy_classification
         valid_levels = {RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH}
 
-        assert classification.classifications["hate_speech"] in valid_levels
-        assert classification.classifications["sexual"] in valid_levels
-        assert classification.classifications["violence"] in valid_levels
+        assert classification.classifications[Category.HATE_SPEECH.value] in valid_levels
+        assert classification.classifications[Category.SEXUAL.value] in valid_levels
+        assert classification.classifications[Category.VIOLENCE.value] in valid_levels
 
     @pytest.mark.asyncio
     async def test_video_predictions_are_per_frame(self):
