@@ -37,7 +37,7 @@ class ModerationResult:
         policy_classification: Final risk levels per category (high/medium/low).
                               Aggregates across all models by taking the maximum risk.
         model_predictions: Raw predictions from all models, organized by category.
-                          Keys are Category enum values (e.g., Category.HATE_SPEECH.value).
+                          Keys are Category enum values (e.g., Category.HATE_SPEECH).
                           Each category maps to either:
                           - A single ModelPrediction (text/image)
                           - A list of ModelPredictions (video frames)
@@ -46,12 +46,12 @@ class ModerationResult:
     Example:
         ModerationResult(
             policy_classification=PolicyClassification({
-                Category.VIOLENCE.value: RiskLevel.HIGH,
-                Category.HATE_SPEECH.value: RiskLevel.LOW
+                Category.VIOLENCE: RiskLevel.HIGH,
+                Category.HATE_SPEECH: RiskLevel.LOW
             }),
             model_predictions={
-                Category.VIOLENCE.value: [frame1, frame2, frame3],  # Video frames
-                Category.HATE_SPEECH.value: prediction_obj  # Single prediction
+                Category.VIOLENCE: [frame1, frame2, frame3],  # Video frames
+                Category.HATE_SPEECH: prediction_obj  # Single prediction
             }
         )
     """
@@ -218,5 +218,5 @@ class ContentModerationService:
             prediction: ModelPrediction | list[ModelPrediction] = await _predict_by_modality(model, preprocessed_content)
             category = _get_prediction_category(prediction)
             # Store prediction under its category (using .value for string key), accumulating all model predictions in a list
-            predictions_by_category.setdefault(category.value, []).append(prediction)
+            predictions_by_category.setdefault(category, []).append(prediction)
         return predictions_by_category

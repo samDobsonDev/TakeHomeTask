@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import StrEnum
 import random
 from dataclasses import dataclass, fields
 from typing import Generic, TypeVar
 from src.preprocessor import PreprocessedText, PreprocessedImage, PreprocessedVideo, PreprocessedContent
 
 
-class Category(Enum):
+class Category(StrEnum):
     """Content moderation categories"""
     HATE_SPEECH = "hate_speech"
     SEXUAL = "sexual"

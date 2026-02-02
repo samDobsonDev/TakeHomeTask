@@ -69,9 +69,9 @@ class TestModerationResult:
     def test_moderation_result_creation(self):
         classification = PolicyClassification(
             classifications={
-                Category.HATE_SPEECH.value: RiskLevel.LOW,
-                Category.SEXUAL.value: RiskLevel.MEDIUM,
-                Category.VIOLENCE.value: RiskLevel.HIGH
+                Category.HATE_SPEECH: RiskLevel.LOW,
+                Category.SEXUAL: RiskLevel.MEDIUM,
+                Category.VIOLENCE: RiskLevel.HIGH
             }
         )
         predictions = {}
@@ -177,12 +177,12 @@ class TestContentModerationService:
         result = await service.moderate(request)
         classification = result.policy_classification
 
-        assert Category.HATE_SPEECH.value in classification.classifications
-        assert Category.SEXUAL.value in classification.classifications
-        assert Category.VIOLENCE.value in classification.classifications
-        assert isinstance(classification.classifications[Category.HATE_SPEECH.value], RiskLevel)
-        assert isinstance(classification.classifications[Category.SEXUAL.value], RiskLevel)
-        assert isinstance(classification.classifications[Category.VIOLENCE.value], RiskLevel)
+        assert Category.HATE_SPEECH in classification.classifications
+        assert Category.SEXUAL in classification.classifications
+        assert Category.VIOLENCE in classification.classifications
+        assert isinstance(classification.classifications[Category.HATE_SPEECH], RiskLevel)
+        assert isinstance(classification.classifications[Category.SEXUAL], RiskLevel)
+        assert isinstance(classification.classifications[Category.VIOLENCE], RiskLevel)
 
     @pytest.mark.asyncio
     async def test_model_predictions_have_correct_categories(self, service):
@@ -193,7 +193,7 @@ class TestContentModerationService:
             customer="test"
         )
         result = await service.moderate(request)
-        expected_categories = {Category.HATE_SPEECH.value, Category.SEXUAL.value, Category.VIOLENCE.value}
+        expected_categories = {Category.HATE_SPEECH, Category.SEXUAL, Category.VIOLENCE}
 
         assert set(result.model_predictions.keys()) == expected_categories
 
@@ -270,9 +270,9 @@ class TestContentModerationServiceIntegration:
         # Verify complete result structure
         classifications = result.policy_classification.classifications
 
-        assert classifications[Category.HATE_SPEECH.value] in RiskLevel
-        assert classifications[Category.SEXUAL.value] in RiskLevel
-        assert classifications[Category.VIOLENCE.value] in RiskLevel
+        assert classifications[Category.HATE_SPEECH] in RiskLevel
+        assert classifications[Category.SEXUAL] in RiskLevel
+        assert classifications[Category.VIOLENCE] in RiskLevel
         assert len(result.model_predictions) == 3
 
     @pytest.mark.asyncio
@@ -294,9 +294,9 @@ class TestContentModerationServiceIntegration:
         classification = result.policy_classification
         valid_levels = {RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH}
 
-        assert classification.classifications[Category.HATE_SPEECH.value] in valid_levels
-        assert classification.classifications[Category.SEXUAL.value] in valid_levels
-        assert classification.classifications[Category.VIOLENCE.value] in valid_levels
+        assert classification.classifications[Category.HATE_SPEECH] in valid_levels
+        assert classification.classifications[Category.SEXUAL] in valid_levels
+        assert classification.classifications[Category.VIOLENCE] in valid_levels
 
     @pytest.mark.asyncio
     async def test_video_predictions_are_per_frame(self):

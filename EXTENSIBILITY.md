@@ -26,7 +26,7 @@ The category is determined by the `get_category()` method on the prediction clas
 In `src/model.py`, add to the `Category` enum:
 
 ```python
-class Category(Enum):
+class Category(StrEnum):
     """Content moderation categories"""
     HATE_SPEECH = "hate_speech"
     SEXUAL = "sexual"
@@ -103,7 +103,7 @@ def models(self) -> list[ContentModerationModel]:
     return self._models
 ```
 
-The new "spam" category will automatically appear in moderation results. The service uses `category.value` (the string `"spam"`) as the dict key, so results can be accessed via `response.results[Category.SPAM.value]` or `response.results["spam"]`.
+The new "spam" category will automatically appear in moderation results and can be accessed via `response.results[Category.SPAM]`.
 
 ---
 

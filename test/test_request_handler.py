@@ -221,13 +221,13 @@ class TestFormatSuccessResponse:
         mock_prediction.model_name = "TestModel"
         # For single model per category, only include one category
         predictions_dict: dict = {
-            Category.HATE_SPEECH.value: mock_prediction
+            Category.HATE_SPEECH: mock_prediction
         }
         moderation_result: ModerationResult = build_moderation_result(predictions_dict)
         response = format_success_response(moderation_result)
 
         assert isinstance(response, ModerationResponse)
-        assert Category.HATE_SPEECH.value in response.results
+        assert Category.HATE_SPEECH in response.results
 
     def test_format_success_response_includes_risk_levels(self):
         """Verify success response includes risk levels"""
@@ -236,17 +236,17 @@ class TestFormatSuccessResponse:
         mock_prediction.model_name = "TestModel"
         # Test with multiple categories to verify each gets a risk level
         predictions_dict: dict = {
-            Category.HATE_SPEECH.value: mock_prediction,
-            Category.SEXUAL.value: mock_prediction,
-            Category.VIOLENCE.value: mock_prediction
+            Category.HATE_SPEECH: mock_prediction,
+            Category.SEXUAL: mock_prediction,
+            Category.VIOLENCE: mock_prediction
         }
         moderation_result: ModerationResult = build_moderation_result(predictions_dict)
         response = format_success_response(moderation_result)
 
-        assert response.results[Category.HATE_SPEECH.value].risk_level is not None
-        assert isinstance(response.results[Category.HATE_SPEECH.value].risk_level, RiskLevel)
-        assert response.results[Category.SEXUAL.value].risk_level is not None
-        assert response.results[Category.VIOLENCE.value].risk_level is not None
+        assert response.results[Category.HATE_SPEECH].risk_level is not None
+        assert isinstance(response.results[Category.HATE_SPEECH].risk_level, RiskLevel)
+        assert response.results[Category.SEXUAL].risk_level is not None
+        assert response.results[Category.VIOLENCE].risk_level is not None
 
     def test_format_success_response_includes_scores(self):
         """Verify success response includes detailed scores"""
@@ -255,13 +255,13 @@ class TestFormatSuccessResponse:
         mock_prediction.model_name = "TestModel"
         # For single model per category, predictions_dict should have one model per category
         predictions_dict: dict = {
-            Category.HATE_SPEECH.value: mock_prediction
+            Category.HATE_SPEECH: mock_prediction
         }
         moderation_result: ModerationResult = build_moderation_result(predictions_dict)
         response = format_success_response(moderation_result)
 
-        assert len(response.results[Category.HATE_SPEECH.value].models) == 1
-        model = response.results[Category.HATE_SPEECH.value].models[0]
+        assert len(response.results[Category.HATE_SPEECH].models) == 1
+        model = response.results[Category.HATE_SPEECH].models[0]
         assert isinstance(model, TextImageModelResult)
         assert model.scores["metric1"] == 0.5
         assert model.scores["metric2"] == 0.3
@@ -272,13 +272,13 @@ class TestFormatSuccessResponse:
         mock_prediction.to_dict.return_value = {"metric": 0.5}
         mock_prediction.model_name = "HateSpeechModel"
         predictions_dict: dict = {
-            Category.HATE_SPEECH.value: mock_prediction
+            Category.HATE_SPEECH: mock_prediction
         }
         moderation_result: ModerationResult = build_moderation_result(predictions_dict)
         response = format_success_response(moderation_result)
 
-        assert len(response.results[Category.HATE_SPEECH.value].models) == 1
-        assert response.results[Category.HATE_SPEECH.value].models[0].model_name == "HateSpeechModel"
+        assert len(response.results[Category.HATE_SPEECH].models) == 1
+        assert response.results[Category.HATE_SPEECH].models[0].model_name == "HateSpeechModel"
 
     def test_format_success_response_video_predictions(self):
         """Verify success response for video predictions with frames"""
@@ -289,14 +289,14 @@ class TestFormatSuccessResponse:
         mock_prediction2.to_dict.return_value = {"metric": 0.7}
         mock_prediction2.model_name = "TestModel"
         predictions_dict: dict = {
-            Category.HATE_SPEECH.value: [[mock_prediction1, mock_prediction2]]
+            Category.HATE_SPEECH: [[mock_prediction1, mock_prediction2]]
         }
         moderation_result: ModerationResult = build_moderation_result(predictions_dict)
         response = format_success_response(moderation_result)
-        model = response.results[Category.HATE_SPEECH.value].models[0]
+        model = response.results[Category.HATE_SPEECH].models[0]
 
         assert isinstance(response, ModerationResponse)
-        assert len(response.results[Category.HATE_SPEECH.value].models) == 1
+        assert len(response.results[Category.HATE_SPEECH].models) == 1
         assert isinstance(model, VideoModelResult)
         assert len(model.frames) == 2
         assert model.frames[0].frame == 0
@@ -311,13 +311,13 @@ class TestFormatSuccessResponse:
         mock_prediction2.to_dict.return_value = {"metric": 0.7}
         mock_prediction2.model_name = "ViolenceModel"
         predictions_dict: dict = {
-            Category.VIOLENCE.value: [[mock_prediction1, mock_prediction2]]
+            Category.VIOLENCE: [[mock_prediction1, mock_prediction2]]
         }
         moderation_result: ModerationResult = build_moderation_result(predictions_dict)
         response = format_success_response(moderation_result)
-        model = response.results[Category.VIOLENCE.value].models[0]
+        model = response.results[Category.VIOLENCE].models[0]
 
-        assert len(response.results[Category.VIOLENCE.value].models) == 1
+        assert len(response.results[Category.VIOLENCE].models) == 1
         assert isinstance(model, VideoModelResult)
         assert model.model_name == "ViolenceModel"
         assert len(model.frames) == 2
@@ -333,16 +333,16 @@ class TestFormatSuccessResponse:
         mock_prediction2.to_dict.return_value = {"metric": 0.7}
         mock_prediction2.model_name = "OpenAIViolenceModel"
         predictions_dict: dict = {
-            Category.VIOLENCE.value: [mock_prediction1, mock_prediction2]
+            Category.VIOLENCE: [mock_prediction1, mock_prediction2]
         }
         moderation_result: ModerationResult = build_moderation_result(predictions_dict)
         response = format_success_response(moderation_result)
 
-        assert len(response.results[Category.VIOLENCE.value].models) == 2
-        assert isinstance(response.results[Category.VIOLENCE.value].models[0], TextImageModelResult)
-        assert isinstance(response.results[Category.VIOLENCE.value].models[1], TextImageModelResult)
-        assert response.results[Category.VIOLENCE.value].models[0].model_name == "RandomViolenceModel"
-        assert response.results[Category.VIOLENCE.value].models[1].model_name == "OpenAIViolenceModel"
+        assert len(response.results[Category.VIOLENCE].models) == 2
+        assert isinstance(response.results[Category.VIOLENCE].models[0], TextImageModelResult)
+        assert isinstance(response.results[Category.VIOLENCE].models[1], TextImageModelResult)
+        assert response.results[Category.VIOLENCE].models[0].model_name == "RandomViolenceModel"
+        assert response.results[Category.VIOLENCE].models[1].model_name == "OpenAIViolenceModel"
 
 
 class TestFormatErrorResponse:
