@@ -227,7 +227,7 @@ def format_error_response(error_message: str, status_code: int) -> ErrorResponse
 
 class RequestHandler:
     """
-    HTTP request handler for content moderation API.
+    Mimics an HTTP request handler for content moderation API.
 
     Accepts JSON requests, delegates to the moderation service,
     and returns formatted JSON responses.
