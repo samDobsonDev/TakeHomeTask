@@ -161,7 +161,7 @@ class TestMockModelPredictions:
     async def test_violence_model_predict_image_returns_valid_scores(self):
         """Verify ViolenceModel.predict_image returns valid scores"""
         model = RandomViolenceModel()
-        preprocessed = PreprocessedImage(data=[1] * 16, original_bytes=b"test image")#
+        preprocessed = PreprocessedImage(data=[1] * 16, original_bytes=b"test image")
         prediction = await model.predict_image(preprocessed)
 
         assert isinstance(prediction, ViolencePrediction)
