@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Union
 from src.risk_classifier import RiskClassifier, RiskLevel
 from src.score_calculator import ScoreCalculator
