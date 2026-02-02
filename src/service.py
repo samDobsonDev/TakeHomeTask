@@ -1,11 +1,15 @@
 from dataclasses import dataclass
 from enum import Enum
 import base64
+import asyncio
+import logging
 from typing import Union
 from src.preprocessor import ContentPreprocessor, PreprocessedContent, PreprocessedText, PreprocessedImage, PreprocessedVideo
 from src.model import ContentModerationModel, ModelPrediction, Category
 from src.risk_classifier import RiskClassifier, PolicyClassification, RiskLevel
 from src.score_calculator import ScoreCalculator
+
+logger = logging.getLogger(__name__)
 
 
 class Modality(Enum):
@@ -203,7 +207,7 @@ class ContentModerationService:
     async def _run_all_models(self, preprocessed_content: PreprocessedContent) -> dict[
         str, list[Union[ModelPrediction, list[ModelPrediction]]]]:
         """
-        Run all models on preprocessed content.
+        Run all models concurrently on preprocessed content using asyncio.gather().
 
         Returns a dict mapping category to a list of predictions from all models.
         Each prediction can be:
@@ -213,10 +217,22 @@ class ContentModerationService:
         This creates a normalized structure: always a list per category, containing 
         predictions from each model that predicted that category.
         """
+        tasks = [
+            _predict_by_modality(model, preprocessed_content)
+            for model in self.models
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Process results and organize by category
         predictions_by_category = {}
-        for model in self.models:
-            prediction: ModelPrediction | list[ModelPrediction] = await _predict_by_modality(model, preprocessed_content)
-            category = _get_prediction_category(prediction)
-            # Store prediction under its category (using .value for string key), accumulating all model predictions in a list
-            predictions_by_category.setdefault(category, []).append(prediction)
+        for model, result in zip(self.models, results):
+            # Handle model failures gracefully
+            if isinstance(result, Exception):
+                logger.error(f"Model {model.name} failed with error: {result}")
+                continue
+            try:
+                category = _get_prediction_category(result)
+                predictions_by_category.setdefault(category, []).append(result)
+            except Exception as e:
+                logger.error(f"Failed to process prediction from model {model.name}: {e}")
+                continue
         return predictions_by_category
